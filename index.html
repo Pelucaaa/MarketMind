@@ -176,12 +176,23 @@
 
     // ── LOAD DATA ────────────────────────────────────────
     async function loadUserData() {
-      document.getElementById('main-content').innerHTML = '<div class="loading"><div class="spinner"></div> Cargando tus datos...</div>';
+      if (S.trades.length === 0) {
+        document.getElementById('main-content').innerHTML = '<div class="loading"><div class="spinner"></div> Cargando tus datos...</div>';
+      }
       try {
-        const { data: trades, error } = await sb.from('trades').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true });
+        const { data: trades, error } = await Promise.race([
+          sb.from('trades').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true }),
+          new Promise((_, r) => setTimeout(() => r(new Error('Timeout_Load')), 8000))
+        ]);
         if (error) throw error;
         S.trades = (trades || []).map(t => ({ ...t, result: parseFloat(t.result), checklist: t.checklist || {}, errors: t.errors || [], feedback: t.feedback || null, screenshot_url: t.screenshot_url || null }));
-      } catch (e) { console.error(e); S.trades = []; }
+      } catch (e) {
+        if (e.message === 'Timeout_Load') {
+           document.getElementById('main-content').innerHTML = '<div class="empty" style="margin-top:40px"><div class="empty-icon">🔌</div><div class="empty-title">Conexión interrumpida</div><div class="empty-sub">La red no responde (probablemente por dejar la web en reposo).</div><button class="btn btn-primary" onclick="window.location.reload()" style="margin-top:16px"><i class="ti ti-refresh"></i> Recargar página</button></div>';
+           throw e;
+        }
+        console.error(e); S.trades = []; 
+      }
       try { const { data: cfg } = await sb.from('checklist_config').select('items').eq('user_id', S.user.id).maybeSingle(); if (cfg?.items?.length) S.checklist = cfg.items; } catch (e) { }
       try { const { data: plans } = await sb.from('weekly_plans').select('plan').eq('user_id', S.user.id).order('created_at', { ascending: false }).limit(1); if (plans?.length) S.weeklyPlan = plans[0].plan; } catch (e) { }
       try { const { data: h } = await sb.from('habits').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true }); S.habits = h || []; } catch (e) { S.habits = []; }
