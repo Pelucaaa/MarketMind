@@ -1249,10 +1249,10 @@
       m.className = 'modal-overlay';
       m.id = 'lightbox-modal';
       m.style.zIndex = '9999';
-      m.innerHTML = \`<div style="position:relative; width:90%; max-width:1200px; max-height:90vh; display:flex; justify-content:center; align-items:center;">
+      m.innerHTML = `<div style="position:relative; width:90%; max-width:1200px; max-height:90vh; display:flex; justify-content:center; align-items:center;">
         <button onclick="closeModal('lightbox-modal')" style="position:absolute; top:-40px; right:0; background:none; border:none; color:#fff; font-size:30px; cursor:pointer;">&times;</button>
-        <img src="\${url}" style="max-width:100%; max-height:90vh; object-fit:contain; border-radius:8px;">
-      </div>\`;
+        <img src="${url}" style="max-width:100%; max-height:90vh; object-fit:contain; border-radius:8px;">
+      </div>`;
       m.onclick = function(e) { if(e.target === m) closeModal('lightbox-modal'); };
       document.body.appendChild(m);
     }
