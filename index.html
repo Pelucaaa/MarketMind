@@ -439,7 +439,7 @@
 
   <div class="card">
     <div class="card-header"><span class="card-title">Últimos trades</span><button class="btn btn-ghost btn-sm" onclick="showPage('trades')">Ver todos</button></div>
-    ${renderTradeList(S.trades.slice(-5).reverse())}
+    ${renderTradeList(S.trades.slice(-5).reverse(), true)}
   </div>`;
       setTimeout(() => drawEquity('eq-chart'), 80);
       checkRiskAlerts();
@@ -459,7 +459,7 @@
       if (!trades.length) return `<div class="empty"><span class="empty-icon">📋</span><div class="empty-title">Sin trades todavía</div><div class="empty-sub">Registra tu primer trade</div></div>`;
       return trades.map(t => `
   <div class="trade-row" onclick="openTradeDetail(${t.id})" style="${showImages && t.screenshot_url ? 'align-items:flex-start' : ''}">
-    ${showImages && t.screenshot_url ? `<img src="${t.screenshot_url}" style="width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onclick="event.stopPropagation();window.open('${t.screenshot_url}','_blank')">` : ''}
+    ${showImages && t.screenshot_url ? `<img src="${t.screenshot_url}" style="width:100px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onclick="event.stopPropagation();window.open('${t.screenshot_url}','_blank')">` : ''}
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div class="trade-pair">${t.pair}</div>
