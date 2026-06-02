@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MarketMind — Trading Journal</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <!-- AUTH -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <div class="auth-logo-mark">M</div>
+        <span class="auth-logo-text">MarketMind</span>
+      </div>
+      <p class="auth-tagline">Tu journal de trading inteligente</p>
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="switchAuthTab('login')">Entrar</button>
+        <button class="auth-tab" onclick="switchAuthTab('register')">Registrarse</button>
+      </div>
+      <div id="auth-error" class="auth-error" style="display:none"></div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-input" id="auth-email" placeholder="tu@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <input type="password" class="form-input" id="auth-password" placeholder="Mínimo 6 caracteres"
+          autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px" id="auth-btn"
+        onclick="handleAuth()">Entrar</button>
+      <p style="text-align:center;color:var(--text3);font-size:11px;margin-top:16px;line-height:1.6">Tus datos son
+        privados.<br>Solo tú puedes verlos.</p>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" style="display:none">
+    <div class="topbar">
+      <div class="logo">
+        <div class="logo-mark">M</div>
+        <span>MarketMind</span>
+        <span class="logo-sub">JOURNAL</span>
+      </div>
+      <div class="nav">
+        <button class="nav-btn active" onclick="showPage('dashboard')" id="nav-dashboard"><i
+            class="ti ti-layout-dashboard"></i><span>Inicio</span></button>
+        <button class="nav-btn" onclick="showPage('trades')" id="nav-trades"><i
+            class="ti ti-arrows-exchange"></i><span>Trades</span></button>
+        <button class="nav-btn" onclick="showPage('analisis')" id="nav-analisis"><i
+            class="ti ti-chart-bar"></i><span>Análisis</span></button>
+        <button class="nav-btn" onclick="showPage('plan')" id="nav-plan"><i
+            class="ti ti-calendar-week"></i><span>Plan</span></button>
+        <button class="nav-btn" onclick="showPage('habitos')" id="nav-habitos"><i
+            class="ti ti-leaf"></i><span>Hábitos</span></button>
+        <button class="nav-btn" onclick="showPage('diario')" id="nav-diario"><i
+            class="ti ti-notebook"></i><span>Diario</span></button>
+        <button class="nav-btn" onclick="showPage('objetivos')" id="nav-objetivos"><i
+            class="ti ti-target"></i><span>Objetivos</span></button>
+        <button class="nav-btn" onclick="showPage('config')" id="nav-config"><i
+            class="ti ti-settings"></i><span>Config</span></button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="user-badge">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <span id="user-email-display">...</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="handleLogout()"><i class="ti ti-logout"></i> Salir</button>
+      </div>
+    </div>
+    <!-- RISK ALERT BANNER -->
+    <div id="risk-banner"
+      style="display:none;background:var(--red-dim);border-bottom:1px solid var(--red);padding:10px 24px;display:none;align-items:center;gap:10px">
+      <i class="ti ti-alert-triangle" style="color:var(--red);font-size:16px"></i>
+      <span id="risk-banner-msg" style="font-size:13px;color:var(--red);font-weight:500"></span>
+      <button onclick="document.getElementById('risk-banner').style.display='none'"
+        style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:18px">×</button>
+    </div>
+    <div class="main" id="main-content">
+      <div class="loading">
+        <div class="spinner"></div> Cargando...
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <script>
+    const SUPABASE_URL = 'https://vkjirtcqyexoyrpiflgu.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_92rFDjEPcxw9CfMRMJWN6A_qNUdfAdJ';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: localStorage }
+    });
+
+    const PAIRS = ['XAUUSD', 'NAS100', 'EURUSD', 'GBPUSD', 'US30', 'SPX500', 'USDJPY', 'BTCUSD', 'ETHUSDT'];
+    const SETUPS = ['Liquidity Sweep + FVG', 'Order Block + BOS', 'CHOCH + FVG', 'Liquidity Sweep + OB', 'Fair Value Gap', 'Market Structure Break', 'Inducement + Sweep', 'Custom'];
+    const SESSIONS = ['Londres', 'Nueva York', 'Asia', 'Londres/NY Overlap'];
+    const TIMEFRAMES = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1'];
+    const ERROR_TYPES = ['FOMO', 'Revenge Trading', 'Entrada Temprana', 'Entrada Tardía', 'Ignorar HTF', 'Overtrading', 'Sin Checklist', 'Gestión Pobre'];
+    const HABIT_CATS = ['Físico', 'Mental', 'Rutina', 'Trading', 'Otro'];
+    const DEFAULT_CL = [
+      { id: 1, label: 'Liquidez tomada', active: true }, { id: 2, label: 'BOS confirmado', active: true },
+      { id: 3, label: 'CHOCH confirmado', active: true }, { id: 4, label: 'FVG presente', active: true },
+      { id: 5, label: 'Order Block presente', active: true }, { id: 6, label: 'Bias HTF confirmado', active: true },
+      { id: 7, label: 'Zona premium/discount', active: true }, { id: 8, label: 'Sesión correcta', active: true },
+      { id: 9, label: 'Riesgo controlado', active: true },
+    ];
+
+    let S = {
+      user: null, trades: [], checklist: [...DEFAULT_CL], weeklyPlan: null,
+      apiKey: '', equityChart: null, currentPage: 'dashboard',
+      habits: [], habitLogs: {}, diaryEntries: [], monthlyGoal: null,
+      premarket: {}, setupChart: null, periodChart: null
+    };
+
+    // ── AUTH ─────────────────────────────────────────────
+    let authMode = 'login';
+    function switchAuthTab(m) {
+      authMode = m;
+      document.querySelectorAll('.auth-tab').forEach((t, i) => t.classList.toggle('active', (m === 'login' && i === 0) || (m === 'register' && i === 1)));
+      document.getElementById('auth-btn').textContent = m === 'login' ? 'Entrar' : 'Crear cuenta';
+      document.getElementById('auth-error').style.display = 'none';
+    }
+    async function handleAuth() {
+      const email = document.getElementById('auth-email').value.trim();
+      const pwd = document.getElementById('auth-password').value;
+      if (!email || !pwd) { showAuthError('Completa email y contraseña'); return; }
+      const btn = document.getElementById('auth-btn'); btn.textContent = 'Cargando...'; btn.disabled = true;
+      try {
+        const res = authMode === 'login' ? await sb.auth.signInWithPassword({ email, password: pwd }) : await sb.auth.signUp({ email, password: pwd });
+        if (res.error) throw res.error;
+      } catch (e) {
+        const msgs = { 'Invalid login credentials': 'Email o contraseña incorrectos', 'User already registered': 'Email ya registrado', 'Password should be at least 6 characters': 'Mínimo 6 caracteres', 'Email not confirmed': 'Confirma tu email' };
+        showAuthError(msgs[e.message] || e.message);
+        btn.disabled = false; btn.textContent = authMode === 'login' ? 'Entrar' : 'Crear cuenta';
+      }
+    }
+    function showAuthError(msg) { const el = document.getElementById('auth-error'); el.textContent = msg; el.style.display = 'block'; }
+    async function handleLogout() {
+      try { await sb.auth.signOut(); } catch (e) { }
+      S = { user: null, trades: [], checklist: [...DEFAULT_CL], weeklyPlan: null, apiKey: localStorage.getItem('mm_key') || '', equityChart: null, currentPage: 'dashboard', habits: [], habitLogs: {}, diaryEntries: [], monthlyGoal: null, premarket: {}, setupChart: null, periodChart: null };
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('auth-screen').style.display = 'flex';
+      document.getElementById('auth-email').value = '';
+      document.getElementById('auth-password').value = '';
+      document.getElementById('auth-error').style.display = 'none';
+      document.getElementById('auth-btn').textContent = 'Entrar';
+      document.getElementById('auth-btn').disabled = false;
+      switchAuthTab('login');
+    }
+    let isInitialAuthLoad = true;
+    sb.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        isInitialAuthLoad = true;
+        document.getElementById('app').style.display = 'none';
+        document.getElementById('auth-screen').style.display = 'flex';
+        return;
+      }
+      if (session?.user) {
+        S.user = session.user; S.apiKey = localStorage.getItem('mm_key') || '';
+        if (isInitialAuthLoad || event === 'SIGNED_IN') {
+          isInitialAuthLoad = false;
+          document.getElementById('auth-screen').style.display = 'none';
+          document.getElementById('app').style.display = 'flex';
+          document.getElementById('user-avatar').textContent = session.user.email[0].toUpperCase();
+          document.getElementById('user-email-display').textContent = session.user.email.split('@')[0];
+          await loadUserData();
+          showPage('dashboard');
+          checkRiskAlerts();
+        }
+      }
+    });
+
+    // ── LOAD DATA ────────────────────────────────────────
+    async function loadUserData() {
+      document.getElementById('main-content').innerHTML = '<div class="loading"><div class="spinner"></div> Cargando tus datos...</div>';
+      try {
+        const { data: trades, error } = await sb.from('trades').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true });
+        if (error) throw error;
+        S.trades = (trades || []).map(t => ({ ...t, result: parseFloat(t.result), checklist: t.checklist || {}, errors: t.errors || [], feedback: t.feedback || null, screenshot_url: t.screenshot_url || null }));
+      } catch (e) { console.error(e); S.trades = []; }
+      try { const { data: cfg } = await sb.from('checklist_config').select('items').eq('user_id', S.user.id).maybeSingle(); if (cfg?.items?.length) S.checklist = cfg.items; } catch (e) { }
+      try { const { data: plans } = await sb.from('weekly_plans').select('plan').eq('user_id', S.user.id).order('created_at', { ascending: false }).limit(1); if (plans?.length) S.weeklyPlan = plans[0].plan; } catch (e) { }
+      try { const { data: h } = await sb.from('habits').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true }); S.habits = h || []; } catch (e) { S.habits = []; }
+      try {
+        const from = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+        const { data: logs } = await sb.from('habit_logs').select('*').eq('user_id', S.user.id).gte('log_date', from);
+        S.habitLogs = {}; (logs || []).forEach(l => { S.habitLogs[`${l.habit_id}_${l.log_date}`] = true; });
+      } catch (e) { S.habitLogs = {}; }
+      try {
+        const from = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+        const { data: d } = await sb.from('diary_entries').select('*').eq('user_id', S.user.id).gte('entry_date', from).order('entry_date', { ascending: false });
+        S.diaryEntries = d || [];
+      } catch (e) { S.diaryEntries = []; }
+      try {
+        const month = new Date().toISOString().slice(0, 7);
+        const { data: g } = await sb.from('monthly_goals').select('*').eq('user_id', S.user.id).eq('month', month).maybeSingle();
+        S.monthlyGoal = g || null;
+      } catch (e) { S.monthlyGoal = null; }
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data: pm } = await sb.from('premarket').select('*').eq('user_id', S.user.id).eq('entry_date', today).maybeSingle();
+        S.premarket = pm || {};
+      } catch (e) { S.premarket = {}; }
+    }
+
+    // ── SUPABASE HELPERS ─────────────────────────────────
+    async function saveTrade(t) {
+      const row = { user_id: S.user.id, pair: t.pair, direction: t.direction, result: t.result, rr: t.result, setup: t.setup, session: t.session, timeframe: t.timeframe, emotion: t.emotion, confidence: t.confidence, stress: t.stress, notes: t.notes || '', checklist: t.checklist || {}, score: null, errors: [], feedback: null, duration_minutes: t.duration_minutes || null };
+      if (t.screenshot_url !== undefined) row.screenshot_url = t.screenshot_url;
+      try {
+        const { data, error } = await sb.from('trades').insert(row).select().single();
+        if (error) {
+          if (error.message && (error.message.includes('screenshot_url') || error.message.includes('duration_minutes'))) {
+            delete row.screenshot_url; delete row.duration_minutes;
+            const { data: d2, error: e2 } = await sb.from('trades').insert(row).select().single();
+            if (e2) throw e2; return d2;
+          }
+          throw error;
+        }
+        return data;
+      } catch (e) { console.error(e); showToast('Error: ' + e.message, 'warn'); return null; }
+    }
+    async function updateTradeAI(id, score, errors, feedback) { try { await sb.from('trades').update({ score, errors, feedback }).eq('id', id).eq('user_id', S.user.id); } catch (e) { } }
+    async function deleteTrade(id) { await sb.from('trades').delete().eq('id', id).eq('user_id', S.user.id); }
+    async function saveChecklistCfg() { try { await sb.from('checklist_config').upsert({ user_id: S.user.id, items: S.checklist }, { onConflict: 'user_id' }); } catch (e) { } }
+    async function saveWeeklyPlan(plan) { const today = new Date().toISOString().split('T')[0]; try { await sb.from('weekly_plans').insert({ user_id: S.user.id, week_start: today, plan }); } catch (e) { } }
+    async function uploadScreenshot(file) {
+      if (!file) return null;
+      try {
+        const ext = file.name.split('.').pop().toLowerCase();
+        const path = `${S.user.id}/${Date.now()}.${ext}`;
+        const { error } = await sb.storage.from('screenshots').upload(path, file, { upsert: true, contentType: file.type });
+        if (error) throw error;
+        return sb.storage.from('screenshots').getPublicUrl(path).data.publicUrl;
+      } catch (e) { showToast('Imagen no subida, trade se guarda sin ella', 'warn'); return null; }
+    }
+    async function saveDiaryEntry(entry) {
+      try {
+        const { data, error } = await sb.from('diary_entries').upsert({ user_id: S.user.id, ...entry }, { onConflict: 'user_id,entry_date' }).select().single();
+        if (error) throw error; return data;
+      } catch (e) { showToast('Error guardando diario', 'warn'); return null; }
+    }
+    async function savePremarket(pm) {
+      try {
+        await sb.from('premarket').upsert({ user_id: S.user.id, ...pm }, { onConflict: 'user_id,entry_date' });
+        S.premarket = pm;
+      } catch (e) { showToast('Error guardando premarket', 'warn'); }
+    }
+    async function saveMonthlyGoal(goal) {
+      try {
+        const { data, error } = await sb.from('monthly_goals').upsert({ user_id: S.user.id, ...goal }, { onConflict: 'user_id,month' }).select().single();
+        if (error) throw error; S.monthlyGoal = data;
+      } catch (e) { showToast('Error guardando objetivo', 'warn'); }
+    }
+
+    // ── RISK ALERTS ──────────────────────────────────────
+    function checkRiskAlerts() {
+      const today = new Date().toISOString().split('T')[0];
+      const todayTrades = S.trades.filter(t => t.created_at?.slice(0, 10) === today);
+      const todayPnl = todayTrades.reduce((a, b) => a + b.result, 0);
+      const recent3 = S.trades.slice(-3);
+      const banner = document.getElementById('risk-banner');
+      const msg = document.getElementById('risk-banner-msg');
+      if (todayPnl <= -2) {
+        msg.textContent = `⚠️ Llevas ${todayPnl.toFixed(1)}R hoy. Has alcanzado tu límite diario. Considera parar de operar.`;
+        banner.style.display = 'flex';
+      } else if (recent3.length === 3 && recent3.every(t => t.result < 0)) {
+        msg.textContent = `⚠️ Llevas 3 pérdidas consecutivas. Tómate un descanso antes de continuar.`;
+        banner.style.display = 'flex';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    // ── STATS ────────────────────────────────────────────
+    function calcStats(trades) {
+      const t = trades || S.trades;
+      if (!t.length) return { pnl: 0, wr: 0, rr: 0, weekPnl: 0, winStreak: 0, loseStreak: 0, bestSetup: '-', bestSession: '-', count: 0, maxDrawdown: 0, disciplineStreak: 0 };
+      const wins = t.filter(x => x.result > 0);
+      const total = t.reduce((a, b) => a + b.result, 0);
+      const wr = Math.round(wins.length / t.length * 100);
+      const rr = +(total / t.length).toFixed(2);
+      const wStart = new Date(Date.now() - 7 * 86400000);
+      const weekPnl = t.filter(x => new Date(x.created_at) >= wStart).reduce((a, b) => a + b.result, 0);
+      let ws = 0, ls = 0, cW = 0, cL = 0;
+      for (let i = t.length - 1; i >= 0; i--) { if (t[i].result > 0) { cW++; cL = 0 } else { cL++; cW = 0 } if (cW > ws) ws = cW; if (cL > ls) ls = cL; }
+      const sm = {}; t.forEach(x => { sm[x.setup] = (sm[x.setup] || []); sm[x.setup].push(x.result) });
+      let bS = '-', bSR = -999; Object.entries(sm).forEach(([k, v]) => { const a = v.reduce((a, b) => a + b, 0) / v.length; if (a > bSR) { bSR = a; bS = k } });
+      const se = {}; t.forEach(x => { se[x.session] = (se[x.session] || []); se[x.session].push(x.result) });
+      let bSe = '-', bSeR = -999; Object.entries(se).forEach(([k, v]) => { const a = v.reduce((a, b) => a + b, 0) / v.length; if (a > bSeR) { bSeR = a; bSe = k } });
+      // Drawdown
+      let peak = 0, maxDD = 0, cum = 0;
+      [...t].sort((a, b) => a.created_at > b.created_at ? 1 : -1).forEach(x => { cum += x.result; if (cum > peak) peak = cum; const dd = peak - cum; if (dd > maxDD) maxDD = dd; });
+      // Discipline streak
+      const sorted = [...t].sort((a, b) => a.created_at > b.created_at ? 1 : -1);
+      let ds = 0;
+      const dayMap = {};
+      sorted.forEach(x => { const d = x.created_at?.slice(0, 10); if (!d) return; const cc = Object.values(x.checklist || {}).filter(v => v).length; const tc = Object.values(x.checklist || {}).length; const pct = tc > 0 ? cc / tc : 0; if (!dayMap[d]) dayMap[d] = []; dayMap[d].push(pct); });
+      const days = Object.keys(dayMap).sort().reverse();
+      for (let i = 0; i < days.length; i++) { const avg = dayMap[days[i]].reduce((a, b) => a + b, 0) / dayMap[days[i]].length; if (avg >= 0.8) ds++; else break; }
+      return { pnl: +total.toFixed(2), wr, rr, weekPnl: +weekPnl.toFixed(2), winStreak: ws, loseStreak: ls, bestSetup: bS, bestSession: bSe, count: t.length, maxDrawdown: +maxDD.toFixed(2), disciplineStreak: ds };
+    }
+
+    function calcThermometer() {
+      const s = calcStats();
+      if (!S.trades.length) return 5;
+      let score = 0;
+      // WR reciente (últimos 10 trades)
+      const recent = S.trades.slice(-10);
+      const recentWR = recent.filter(t => t.result > 0).length / recent.length;
+      score += recentWR * 3; // 0-3
+      // Disciplina (racha)
+      score += Math.min(s.disciplineStreak / 7 * 2, 2); // 0-2
+      // Hábitos (últimos 7 días)
+      const today = new Date().toISOString().split('T')[0];
+      const days7 = []; for (let i = 6; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000); days7.push(d.toISOString().split('T')[0]); }
+      let habitScore = 0;
+      if (S.habits.length > 0) {
+        const total = S.habits.length * 7;
+        const done = days7.reduce((acc, d) => acc + S.habits.filter(h => S.habitLogs[`${h.id}_${d}`]).length, 0);
+        habitScore = (done / total) * 2;
+      } else habitScore = 1;
+      score += habitScore; // 0-2
+      // Emoción media últimos trades
+      const emotionAvg = recent.reduce((a, b) => a + (b.emotion || 5), 0) / recent.length;
+      score += (emotionAvg / 10) * 2; // 0-2
+      // Sin alertas de riesgo
+      const todayTrades = S.trades.filter(t => t.created_at?.slice(0, 10) === today);
+      const todayPnl = todayTrades.reduce((a, b) => a + b.result, 0);
+      if (todayPnl >= -1) score += 1;
+      return Math.max(1, Math.min(10, Math.round(score)));
+    }
+
+    function calcErrors() { const c = {}; ERROR_TYPES.forEach(e => c[e] = 0); S.trades.forEach(t => (t.errors || []).forEach(e => { if (c[e] !== undefined) c[e]++ })); return c; }
+
+    function calcPatterns() {
+      const t = S.trades; if (t.length < 3) return []; const p = [];
+      const sm = {}; t.forEach(x => { sm[x.session] = (sm[x.session] || []); sm[x.session].push(x.result) });
+      let wS = null, wA = 999; Object.entries(sm).forEach(([k, v]) => { const a = v.reduce((a, b) => a + b, 0) / v.length; if (a < wA && v.length > 1) { wA = a; wS = k } });
+      if (wS && wA < 0) p.push({ type: 'danger', text: `Sesión más débil: ${wS} con ${wA.toFixed(1)}R de media` });
+      const sp = {}; t.forEach(x => { sp[x.setup] = (sp[x.setup] || []); sp[x.setup].push(x.result) });
+      let bS = null, bA = -999; Object.entries(sp).forEach(([k, v]) => { const a = v.reduce((a, b) => a + b, 0) / v.length; if (a > bA && v.length > 1) { bA = a; bS = k } });
+      if (bS) p.push({ type: 'green', text: `Setup más rentable: "${bS}" con +${bA.toFixed(1)}R` });
+      const nc = t.filter(x => Object.values(x.checklist || {}).filter(v => !v).length > 3);
+      if (nc.length > 1) { const wr = nc.filter(x => x.result > 0).length / nc.length; if (wr < 0.4) p.push({ type: 'danger', text: `Pierdes dinero sin checklist (${Math.round(wr * 100)}% WR)` }); }
+      for (let i = 1; i < t.length; i++) { if (t[i - 1].result < 0 && (t[i].errors || []).includes('Revenge Trading')) { p.push({ type: 'warn', text: 'Haces revenge trading después de pérdidas' }); break; } }
+      const le = t.filter(x => x.emotion <= 4);
+      if (le.length > 1) { const a = le.reduce((a, b) => a + b.result, 0) / le.length; if (a < 0) p.push({ type: 'warn', text: `Emoción baja (≤4) → PnL medio ${a.toFixed(1)}R` }); }
+      return p;
+    }
+
+    // ── EQUITY ───────────────────────────────────────────
+    function drawEquity(id) {
+      const canvas = document.getElementById(id); if (!canvas) return;
+      if (S.equityChart) { S.equityChart.destroy(); S.equityChart = null; }
+      const t = [...S.trades].sort((a, b) => a.created_at > b.created_at ? 1 : -1);
+      let cum = 0, peak = 0; const labels = [], data = [], ddData = [];
+      t.forEach(x => { cum += x.result; if (cum > peak) peak = cum; labels.push(x.created_at?.slice(5, 10) || ''); data.push(+cum.toFixed(2)); ddData.push(+(peak - cum).toFixed(2)); });
+      if (!labels.length) { labels.push('Inicio'); data.push(0); ddData.push(0); }
+      const pos = data[data.length - 1] >= 0; const color = pos ? '#34d399' : '#f87171';
+      S.equityChart = new Chart(canvas, { type: 'line', data: { labels, datasets: [{ label: 'Equity', data, borderColor: color, backgroundColor: pos ? 'rgba(52,211,153,0.06)' : 'rgba(248,113,113,0.06)', borderWidth: 1.5, fill: true, tension: 0.35, pointRadius: 2, pointBackgroundColor: color, yAxisID: 'y' }, { label: 'Drawdown', data: ddData, borderColor: 'rgba(248,113,113,0.4)', backgroundColor: 'rgba(248,113,113,0.04)', borderWidth: 1, fill: true, tension: 0.35, pointRadius: 0, yAxisID: 'y' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.raw}R` }, backgroundColor: '#222228', titleColor: '#a09db8', bodyColor: '#f0eff4', borderColor: '#35353f', borderWidth: 1 } }, scales: { x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5e5c72', font: { size: 10 } } }, y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5e5c72', font: { size: 10 }, callback: v => v + 'R' } } } } });
+    }
+
+    // ── ROUTER ───────────────────────────────────────────
+    function showPage(page) {
+      S.currentPage = page;
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      const b = document.getElementById('nav-' + page); if (b) b.classList.add('active');
+      if (S.equityChart) { S.equityChart.destroy(); S.equityChart = null; }
+      if (S.setupChart) { S.setupChart.destroy(); S.setupChart = null; }
+      if (S.periodChart) { S.periodChart.destroy(); S.periodChart = null; }
+      const pages = { dashboard: renderDashboard, trades: renderTrades, analisis: renderAnalisis, plan: renderPlan, habitos: renderHabitos, diario: renderDiario, objetivos: renderObjetivos, config: renderConfig };
+      document.getElementById('main-content').innerHTML = '';
+      if (pages[page]) pages[page]();
+    }
+
+    // ── DASHBOARD ────────────────────────────────────────
+    function renderDashboard() {
+      const s = calcStats();
+      const thermo = calcThermometer();
+      const thermoColor = thermo >= 7 ? 'var(--green)' : thermo >= 4 ? 'var(--amber)' : 'var(--red)';
+      const thermoLabel = thermo >= 8 ? 'Excelente forma' : thermo >= 6 ? 'Buena forma' : thermo >= 4 ? 'Forma regular' : 'Necesitas descansar';
+      const today = new Date().toISOString().split('T')[0];
+      const todayTrades = S.trades.filter(t => t.created_at?.slice(0, 10) === today);
+      const todayPnl = todayTrades.reduce((a, b) => a + b.result, 0);
+      const monthStr = new Date().toISOString().slice(0, 7);
+      const monthTrades = S.trades.filter(t => t.created_at?.slice(0, 7) === monthStr);
+      const monthPnl = monthTrades.reduce((a, b) => a + b.result, 0);
+      const goalPct = S.monthlyGoal ? Math.min(100, Math.round(monthPnl / S.monthlyGoal.target_r * 100)) : null;
+      // Pre-market today
+      const hasPM = S.premarket?.entry_date === today;
+
+      document.getElementById('main-content').innerHTML = `
+  <div class="section-header">
+    <div><h1>Inicio</h1><p class="page-sub">${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="openPremarket()"><i class="ti ti-sun"></i> Pre-market${hasPM ? ' ✓' : ''}</button>
+      <button class="btn btn-primary" onclick="openAddTrade()"><i class="ti ti-plus"></i> Nuevo Trade</button>
+    </div>
+  </div>
+
+  <!-- Termómetro de forma -->
+  <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,rgba(167,139,250,0.06),var(--bg2))">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:6px">🌡️ Termómetro de forma</div>
+        <div style="font-size:36px;font-weight:700;color:${thermoColor};letter-spacing:-0.04em;line-height:1">${thermo}<span style="font-size:16px;color:var(--text3);font-weight:400">/10</span></div>
+        <div style="font-size:13px;color:${thermoColor};margin-top:4px">${thermoLabel}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div style="display:flex;gap:6px;align-items:center"><span style="font-size:12px;color:var(--text3)">Disciplina</span><div style="width:80px;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.min(100, s.disciplineStreak / 7 * 100)}%;background:var(--lila);border-radius:3px"></div></div><span style="font-size:11px;color:var(--lila);font-family:'Geist Mono',monospace">${s.disciplineStreak}d</span></div>
+        <div style="display:flex;gap:6px;align-items:center"><span style="font-size:12px;color:var(--text3)">Drawdown</span><div style="width:80px;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.min(100, s.maxDrawdown / 4 * 100)}%;background:var(--red);border-radius:3px"></div></div><span style="font-size:11px;color:var(--red);font-family:'Geist Mono',monospace">${s.maxDrawdown}R</span></div>
+        ${goalPct !== null ? `<div style="display:flex;gap:6px;align-items:center"><span style="font-size:12px;color:var(--text3)">Objetivo</span><div style="width:80px;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div style="height:100%;width:${goalPct}%;background:var(--green);border-radius:3px"></div></div><span style="font-size:11px;color:var(--green);font-family:'Geist Mono',monospace">${goalPct}%</span></div>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-4" style="margin-bottom:14px">
+    <div class="metric"><div class="metric-label">PnL Total</div><div class="metric-value ${s.pnl >= 0 ? 'pos' : 'neg'}">${s.pnl >= 0 ? '+' : ''}${s.pnl}R</div><div class="metric-sub">${s.count} trades</div></div>
+    <div class="metric"><div class="metric-label">Hoy</div><div class="metric-value ${todayPnl >= 0 ? 'pos' : 'neg'}">${todayPnl >= 0 ? '+' : ''}${todayPnl.toFixed(1)}R</div><div class="metric-sub">${todayTrades.length} trades hoy</div></div>
+    <div class="metric"><div class="metric-label">Win Rate</div><div class="metric-value ${s.wr >= 50 ? 'pos' : 'neg'}">${s.wr}%</div><div class="metric-sub">RR medio ${s.rr >= 0 ? '+' : ''}${s.rr}R</div></div>
+    <div class="metric"><div class="metric-label">Esta semana</div><div class="metric-value ${s.weekPnl >= 0 ? 'pos' : 'neg'}">${s.weekPnl >= 0 ? '+' : ''}${s.weekPnl}R</div><div class="metric-sub">Últimos 7 días</div></div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card"><div class="card-header"><span class="card-title">Equity + Drawdown</span></div><div class="chart-area" style="height:190px"><canvas id="eq-chart"></canvas></div></div>
+    <div class="card"><div class="card-header"><span class="card-title">Patrones detectados</span></div>
+      ${calcPatterns().length ? calcPatterns().map(p => `<div class="insight-card ${p.type === 'danger' ? 'danger' : p.type === 'warn' ? 'warn' : ''}">${p.text}</div>`).join('') : '<div class="empty" style="padding:20px 0"><span class="empty-icon">🔍</span><div class="empty-sub">Necesitas más trades</div></div>'}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title">Últimos trades</span><button class="btn btn-ghost btn-sm" onclick="showPage('trades')">Ver todos</button></div>
+    ${renderTradeList(S.trades.slice(-5).reverse())}
+  </div>`;
+      setTimeout(() => drawEquity('eq-chart'), 80);
+      checkRiskAlerts();
+    }
+
+    // ── TRADES ───────────────────────────────────────────
+    function renderTrades() {
+      document.getElementById('main-content').innerHTML = `
+  <div class="section-header">
+    <div><h1>Trades</h1><p class="page-sub">${S.trades.length} registros</p></div>
+    <button class="btn btn-primary" onclick="openAddTrade()"><i class="ti ti-plus"></i> Nuevo Trade</button>
+  </div>
+  ${renderTradeList([...S.trades].reverse(), true)}`;
+    }
+
+    function renderTradeList(trades, showImages = false) {
+      if (!trades.length) return `<div class="empty"><span class="empty-icon">📋</span><div class="empty-title">Sin trades todavía</div><div class="empty-sub">Registra tu primer trade</div></div>`;
+      return trades.map(t => `
+  <div class="trade-row" onclick="openTradeDetail(${t.id})" style="${showImages && t.screenshot_url ? 'align-items:flex-start' : ''}">
+    ${showImages && t.screenshot_url ? `<img src="${t.screenshot_url}" style="width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onclick="event.stopPropagation();window.open('${t.screenshot_url}','_blank')">` : ''}
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="trade-pair">${t.pair}</div>
+        <span class="tag ${t.direction === 'Compra' ? 'tag-green' : 'tag-red'}">${t.direction === 'Compra' ? '↑ Long' : '↓ Short'}</span>
+        <div class="trade-result ${t.result >= 0 ? 'pos' : 'neg'}">${t.result >= 0 ? '+' : ''}${t.result}R</div>
+        ${t.duration_minutes ? `<span class="tag tag-gray"><i class="ti ti-clock" style="font-size:10px"></i> ${t.duration_minutes}min</span>` : ''}
+        <div class="trade-meta">${t.session} · ${t.timeframe} · ${(t.setup || '').substring(0, 20)}${(t.setup || '').length > 20 ? '...' : ''}</div>
+        <div style="color:var(--text3);font-size:11px;font-family:'Geist Mono',monospace;margin-left:auto">${t.created_at?.slice(0, 10) || ''}</div>
+      </div>
+    </div>
+    <div class="score-circle" style="background:${(t.score || 0) >= 70 ? 'var(--green-dim)' : (t.score || 0) >= 40 ? 'var(--amber-dim)' : 'var(--red-dim)'};color:${(t.score || 0) >= 70 ? 'var(--green)' : (t.score || 0) >= 40 ? 'var(--amber)' : 'var(--red)'};flex-shrink:0">${t.score || '—'}</div>
+  </div>`).join('');
+    }
+
+    // ── ADD TRADE ────────────────────────────────────────
+    let tradeCheckState = {}, selectedEmotion = 7, selectedImageFile = null;
+    function openAddTrade() {
+      tradeCheckState = {}; selectedEmotion = 7; selectedImageFile = null;
+      S.checklist.filter(c => c.active).forEach(c => { tradeCheckState[c.id] = false });
+      const checks = S.checklist.filter(c => c.active).map(c => `<div class="check-item"><div class="check-box" id="cb-${c.id}" onclick="toggleCheck(${c.id})"></div><span class="check-label">${c.label}</span></div>`).join('');
+      const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'add-modal';
+      m.innerHTML = `<div class="modal">
+    <div class="modal-title"><i class="ti ti-plus" style="color:var(--lila)"></i> Registrar Trade</div>
+    <div class="grid-2">
+      <div class="form-group"><label class="form-label">Par</label><select class="form-input" id="t-pair">${PAIRS.map(p => `<option>${p}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Dirección</label><select class="form-input" id="t-dir"><option>Compra</option><option>Venta</option></select></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group"><label class="form-label">Resultado (R)</label><input type="number" step="0.1" class="form-input" id="t-result" placeholder="ej: 2.5 o -1"></div>
+      <div class="form-group"><label class="form-label">Duración (minutos)</label><input type="number" class="form-input" id="t-duration" placeholder="ej: 45"></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group"><label class="form-label">Sesión</label><select class="form-input" id="t-session">${SESSIONS.map(s => `<option>${s}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Timeframe</label><select class="form-input" id="t-tf">${TIMEFRAMES.map(f => `<option>${f}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Setup</label><select class="form-input" id="t-setup">${SETUPS.map(s => `<option>${s}</option>`).join('')}</select></div>
+    <div class="form-group">
+      <label class="form-label">Estado emocional · 1 = muy malo · 10 = excelente</label>
+      <div class="emotion-track">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `<button class="emotion-btn ${i === 7 ? 'selected' : ''}" data-v="${i}" onclick="selectEmotion(${i})">${i}</button>`).join('')}</div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group"><label class="form-label">Confianza</label><select class="form-input" id="t-conf">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `<option ${i === 7 ? 'selected' : ''}>${i}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Estrés</label><select class="form-input" id="t-stress">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `<option ${i === 3 ? 'selected' : ''}>${i}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Nota</label><textarea class="form-input" id="t-notes" placeholder="¿Qué viste? ¿Por qué entraste?"></textarea></div>
+    <div class="form-group">
+      <label class="form-label">Screenshot (opcional)</label>
+      <div id="img-preview" style="display:none;margin-bottom:8px;position:relative">
+        <img id="img-prev-el" style="width:100%;max-height:140px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border)">
+        <button onclick="removeImage()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.75);border:none;color:#fff;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
+      </div>
+      <label class="upload-zone" id="upload-label"><i class="ti ti-photo"></i> Subir imagen del trade<input type="file" accept="image/*" id="t-screenshot" style="display:none" onchange="previewImage(this)"></label>
+    </div>
+    <div class="form-group">
+      <label class="form-label" style="margin-bottom:8px">Checklist</label>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px">${checks || '<p style="color:var(--text3);font-size:12px">Sin checklist</p>'}</div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('add-modal')">Cancelar</button>
+      <button class="btn btn-primary" id="save-btn" onclick="submitTrade()"><i class="ti ti-check"></i> Guardar y analizar</button>
+    </div>
+  </div>`;
+      document.body.appendChild(m);
+    }
+
+    function previewImage(input) {
+      const file = input.files[0]; if (!file) return; selectedImageFile = file;
+      const reader = new FileReader();
+      reader.onload = e => { document.getElementById('img-prev-el').src = e.target.result; document.getElementById('img-preview').style.display = 'block'; document.getElementById('upload-label').style.display = 'none'; };
+      reader.readAsDataURL(file);
+    }
+    function removeImage() { selectedImageFile = null; document.getElementById('img-preview').style.display = 'none'; document.getElementById('upload-label').style.display = 'flex'; document.getElementById('t-screenshot').value = ''; }
+    function selectEmotion(v) { selectedEmotion = v; document.querySelectorAll('.emotion-btn').forEach(b => b.classList.toggle('selected', parseInt(b.dataset.v) === v)); }
+    function toggleCheck(id) {
+      tradeCheckState[id] = !tradeCheckState[id];
+      const box = document.getElementById('cb-' + id);
+      if (box) { box.classList.toggle('checked', tradeCheckState[id]); box.innerHTML = tradeCheckState[id] ? '<i class="ti ti-check" style="font-size:11px;color:#fff"></i>' : ''; }
+    }
+    async function submitTrade() {
+      const result = parseFloat(document.getElementById('t-result')?.value);
+      if (isNaN(result)) { showToast('Introduce el resultado del trade', 'warn'); return; }
+      const btn = document.getElementById('save-btn'); btn.innerHTML = '<div class="spinner"></div> Guardando...'; btn.disabled = true;
+      let screenshot_url = null;
+      if (selectedImageFile) { showToast('Subiendo imagen...'); screenshot_url = await uploadScreenshot(selectedImageFile); }
+      const trade = { direction: document.getElementById('t-dir').value, pair: document.getElementById('t-pair').value, result, setup: document.getElementById('t-setup').value, session: document.getElementById('t-session').value, timeframe: document.getElementById('t-tf').value, emotion: selectedEmotion, confidence: parseInt(document.getElementById('t-conf').value) || 7, stress: parseInt(document.getElementById('t-stress').value) || 3, notes: document.getElementById('t-notes').value || '', checklist: { ...tradeCheckState }, screenshot_url, duration_minutes: parseInt(document.getElementById('t-duration').value) || null };
+      const saved = await saveTrade(trade);
+      if (!saved) { btn.innerHTML = '<i class="ti ti-check"></i> Guardar y analizar'; btn.disabled = false; return; }
+      trade.id = saved.id; trade.created_at = saved.created_at; trade.screenshot_url = saved.screenshot_url || screenshot_url;
+      S.trades.push(trade);
+      closeModal('add-modal');
+      showToast('Trade guardado. Analizando con IA...');
+      await analyzeTradeWithAI(trade);
+      checkRiskAlerts();
+      showPage(S.currentPage);
+    }
+
+    // ── AI ───────────────────────────────────────────────
+    async function analyzeTradeWithAI(trade) {
+      const cc = Object.values(trade.checklist || {}).filter(v => v).length;
+      const tc = Object.values(trade.checklist || {}).length;
+      const pct = tc > 0 ? Math.round(cc / tc * 100) : 0;
+      let ai;
+      try {
+        if (!S.apiKey) { ai = localAI(trade, pct); }
+        else {
+          const prompt = `Coach trading profesional. Analiza este trade. SOLO JSON sin markdown.\nTrade: Par=${trade.pair},Dir=${trade.direction},R=${trade.result},Setup=${trade.setup},Sesión=${trade.session},TF=${trade.timeframe},Emoción=${trade.emotion}/10,Confianza=${trade.confidence}/10,Estrés=${trade.stress}/10,Checklist=${pct}%,Duración=${trade.duration_minutes || '?'}min,Notas="${trade.notes || 'ninguna'}"\nJSON español: {"score":0-100,"lo_que_hiciste_bien":["p1","p2"],"lo_que_hiciste_mal":["p1","p2"],"errores_detectados":[],"recomendacion":"frase","resumen":"2-3 frases"}`;
+          const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': S.apiKey, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] }) });
+          const d = await res.json(); ai = JSON.parse(d.content[0].text.replace(/```json|```/g, '').trim());
+        }
+      } catch (e) { ai = localAI(trade, pct); }
+      const idx = S.trades.findIndex(t => t.id === trade.id);
+      if (idx >= 0) { S.trades[idx].score = ai.score; S.trades[idx].errors = ai.errores_detectados || []; S.trades[idx].feedback = ai; }
+      await updateTradeAI(trade.id, ai.score, ai.errores_detectados || [], ai);
+      showToast(`Análisis: ${ai.score}/100`, 'success');
+    }
+    function localAI(trade, pct) {
+      const w = trade.result > 0; const g = pct >= 70; let s = 50;
+      if (w) s += 20; if (g) s += 15; if (trade.emotion >= 7) s += 10; if (trade.stress <= 4) s += 5;
+      if (!g) s -= 20; if (trade.emotion <= 4) s -= 15; if (trade.stress >= 8) s -= 10;
+      s = Math.max(5, Math.min(99, s));
+      const errors = []; if (trade.emotion <= 4 && !w) errors.push('Revenge Trading'); if (trade.stress >= 8) errors.push('FOMO'); if (!g) errors.push('Sin Checklist'); if (trade.session === 'Asia' && !w) errors.push('Ignorar HTF');
+      return { score: s, lo_que_hiciste_bien: w ? [g ? 'Seguiste la checklist' : 'Buena dirección', 'Setup identificado'] : ['Registraste el trade', 'Setup identificado'], lo_que_hiciste_mal: !g ? ['Checklist incompleta'] : w ? [] : ['Entrada mal sincronizada'], errores_detectados: errors, recomendacion: g && w ? 'Sigue el proceso.' : 'Completa siempre la checklist.', resumen: w ? `Trade ganador +${trade.result}R. Checklist ${pct}%.` : `Trade perdedor ${trade.result}R. Revisa entrada.` };
+    }
+
+    // ── TRADE DETAIL ─────────────────────────────────────
+    function openTradeDetail(id) {
+      const trade = S.trades.find(t => t.id === id); if (!trade) return;
+      const fb = trade.feedback;
+      const sc = (trade.score || 0) >= 70 ? 'var(--green)' : (trade.score || 0) >= 40 ? 'var(--amber)' : 'var(--red)';
+      const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'detail-modal';
+      m.innerHTML = `<div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <div class="modal-title" style="margin-bottom:0">
+        <span class="tag ${trade.direction === 'Compra' ? 'tag-green' : 'tag-red'}">${trade.direction === 'Compra' ? '↑' : '↓'}</span>
+        ${trade.pair} · <span class="${trade.result >= 0 ? 'pos' : 'neg'}">${trade.result >= 0 ? '+' : ''}${trade.result}R</span>
+        ${trade.duration_minutes ? `<span style="font-size:12px;color:var(--text3);font-weight:400">· ${trade.duration_minutes}min</span>` : ''}
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="closeModal('detail-modal');doDeleteTrade(${id})"><i class="ti ti-trash"></i> Eliminar</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      <span class="tag tag-gray">${trade.session}</span><span class="tag tag-gray">${trade.timeframe}</span><span class="tag tag-gray">${trade.setup}</span>
+      <span style="flex:1"></span><span style="color:var(--text3);font-size:11px;font-family:'Geist Mono',monospace;align-self:center">${trade.created_at?.slice(0, 10) || ''}</span>
+    </div>
+    ${trade.checklist && Object.keys(trade.checklist).length > 0 ? `<div style="margin-bottom:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 14px"><div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em;font-weight:600">Checklist</div><div style="display:flex;flex-wrap:wrap;gap:6px">` + Object.entries(trade.checklist).filter(([_, checked]) => checked).map(([cid, _]) => {
+        const c = S.checklist.find(x => x.id == cid) || DEFAULT_CL.find(x => x.id == cid);
+        return c ? `<span style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:4px"><i class="ti ti-check" style="color:var(--green)"></i> ${c.label}</span>` : '';
+      }).join('') + `</div></div>` : ''}
+    ${trade.screenshot_url ? `<div style="position:relative;margin-bottom:14px"><img src="${trade.screenshot_url}" style="width:100%;aspect-ratio:16/9;border-radius:var(--radius-lg);object-fit:contain;background:#000;cursor:zoom-in;border:1px solid var(--border)" onclick="window.open('${trade.screenshot_url}','_blank')"><span style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:11px;padding:3px 8px;border-radius:4px">Clic para ampliar</span></div>` : ''}
+    ${fb ? `<div class="ai-panel">
+      <div class="ai-header"><div class="ai-dot"></div><span class="ai-label">Análisis IA</span></div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><div class="ai-score" style="color:${sc}">${trade.score}</div><div style="font-size:13px;color:var(--text3)">/100</div></div>
+      <div class="ai-feedback">${fb.resumen || ''}</div>
+      ${fb.lo_que_hiciste_bien?.length ? `<div class="ai-section"><div class="ai-section-title" style="color:var(--green)">Lo que hiciste bien</div><ul class="ai-list">${fb.lo_que_hiciste_bien.map(x => `<li>${x}</li>`).join('')}</ul></div>` : ''}
+      ${fb.lo_que_hiciste_mal?.length ? `<div class="ai-section"><div class="ai-section-title" style="color:var(--red)">Áreas de mejora</div><ul class="ai-list">${fb.lo_que_hiciste_mal.map(x => `<li>${x}</li>`).join('')}</ul></div>` : ''}
+      ${fb.recomendacion ? `<div style="margin-top:12px;padding:10px 12px;background:var(--blue-dim);border-radius:var(--radius);border-left:2px solid var(--blue)"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--blue);margin-bottom:4px;font-weight:600">Recomendación</div><div style="font-size:13px;color:var(--text);line-height:1.5">${fb.recomendacion}</div></div>` : ''}
+      ${fb.errores_detectados?.length ? `<div class="ai-section"><div class="ai-section-title" style="color:var(--amber)">Errores</div><div style="display:flex;gap:5px;flex-wrap:wrap">${fb.errores_detectados.map(e => `<span class="tag tag-amber">${e}</span>`).join('')}</div></div>` : ''}
+    </div>`: `<div style="text-align:center;padding:24px;color:var(--text3)">Sin análisis IA</div>`}
+    <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="closeModal('detail-modal')">Cerrar</button></div>
+  </div>`;
+      document.body.appendChild(m);
+    }
+    async function doDeleteTrade(id) {
+      if (!confirm('¿Eliminar este trade?')) return;
+      await deleteTrade(id); S.trades = S.trades.filter(t => t.id !== id);
+      showToast('Trade eliminado'); showPage(S.currentPage);
+    }
+
+    // ── ANÁLISIS ─────────────────────────────────────────
+    function renderAnalisis() {
+      const errors = calcErrors(); const maxE = Math.max(...Object.values(errors), 1);
+      document.getElementById('main-content').innerHTML = `
+  <div class="section-header"><div><h1>Análisis</h1><p class="page-sub">Rendimiento detallado y comparativas</p></div></div>
+
+  <!-- Comparativa por periodos -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header"><span class="card-title">Comparativa por periodos</span>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-ghost btn-sm" onclick="renderPeriodChart('week')" id="period-week">Semanas</button>
+        <button class="btn btn-ghost btn-sm" onclick="renderPeriodChart('month')" id="period-month">Meses</button>
+      </div>
+    </div>
+    <div class="chart-area" style="height:180px"><canvas id="period-chart"></canvas></div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Comparativa de Setups</span></div>
+      <div class="chart-area" style="height:200px"><canvas id="setup-chart"></canvas></div>
+    </div>
+    <div class="card"><div class="card-header"><span class="card-title">Por sesión</span></div>${renderSessionAnalysis()}</div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card"><div class="card-header"><span class="card-title">Errores más frecuentes</span></div>
+      ${Object.entries(errors).map(([k, v]) => `<div class="error-bar"><div class="error-name">${k}</div><div class="error-track"><div class="error-fill" style="width:${Math.round(v / maxE * 100)}%"></div></div><div class="error-count">${v}</div></div>`).join('')}
+    </div>
+    <div class="card"><div class="card-header"><span class="card-title">Emoción vs Rendimiento</span></div>${renderEmotionAnalysis()}</div>
+  </div>
+
+  <div class="card"><div class="card-header"><span class="card-title">Patrones IA</span></div>
+    ${calcPatterns().length ? calcPatterns().map(p => `<div class="insight-card ${p.type === 'danger' ? 'danger' : p.type === 'warn' ? 'warn' : ''}">${p.text}</div>`).join('') : '<div class="empty" style="padding:20px 0"><span class="empty-icon">🔍</span><div class="empty-sub">Necesitas más trades</div></div>'}
+  </div>`;
+      setTimeout(() => { renderPeriodChart('week'); renderSetupChart(); }, 80);
+    }
+
+    function renderPeriodChart(mode) {
+      document.querySelectorAll('[id^="period-"]').forEach(b => b.classList.remove('active'));
+      document.getElementById('period-' + mode)?.classList.add('active');
+      const canvas = document.getElementById('period-chart'); if (!canvas) return;
+      if (S.periodChart) { S.periodChart.destroy(); S.periodChart = null; }
+      const grouped = {};
+      S.trades.forEach(t => {
+        const d = new Date(t.created_at);
+        let key;
+        if (mode === 'week') { const wStart = new Date(d); wStart.setDate(d.getDate() - d.getDay() + 1); key = wStart.toISOString().slice(0, 10); }
+        else { key = t.created_at?.slice(0, 7); }
+        if (!grouped[key]) grouped[key] = { pnl: 0, count: 0, wins: 0 };
+        grouped[key].pnl += t.result; grouped[key].count++; if (t.result > 0) grouped[key].wins++;
+      });
+      const labels = Object.keys(grouped).sort().slice(-8);
+      const pnlData = labels.map(k => +grouped[k].pnl.toFixed(2));
+      const colors = pnlData.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+      S.periodChart = new Chart(canvas, { type: 'bar', data: { labels, datasets: [{ label: 'PnL', data: pnlData, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.raw}R` }, backgroundColor: '#222228', bodyColor: '#f0eff4', borderColor: '#35353f', borderWidth: 1 } }, scales: { x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5e5c72', font: { size: 10 } } }, y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5e5c72', font: { size: 10 }, callback: v => v + 'R' } } } } });
+    }
+
+    function renderSetupChart() {
+      const canvas = document.getElementById('setup-chart'); if (!canvas) return;
+      if (S.setupChart) { S.setupChart.destroy(); S.setupChart = null; }
+      const sm = {}; S.trades.forEach(t => { if (!sm[t.setup]) sm[t.setup] = { pnl: 0, count: 0, wins: 0 }; sm[t.setup].pnl += t.result; sm[t.setup].count++; if (t.result > 0) sm[t.setup].wins++; });
+      const entries = Object.entries(sm).filter(([, v]) => v.count >= 2).sort((a, b) => b[1].pnl - a[1].pnl).slice(0, 6);
+      if (!entries.length) return;
+      const labels = entries.map(([k]) => k.substring(0, 18));
+      const data = entries.map(([, v]) => +(v.pnl / v.count).toFixed(2));
+      const colors = data.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+      S.setupChart = new Chart(canvas, { type: 'bar', data: { labels, datasets: [{ label: 'Avg R', data, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.raw}R avg` }, backgroundColor: '#222228', bodyColor: '#f0eff4', borderColor: '#35353f', borderWidth: 1 } }, scales: { x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5e5c72', font: { size: 10 }, callback: v => v + 'R' } }, y: { grid: { display: false }, ticks: { color: '#a09db8', font: { size: 11 } } } } } });
+    }
+
+    function renderSessionAnalysis() {
+      const sm = {}; S.trades.forEach(t => { if (!sm[t.session]) sm[t.session] = { trades: [], pnl: 0 }; sm[t.session].trades.push(t); sm[t.session].pnl += t.result; });
+      if (!Object.keys(sm).length) return '<div class="empty" style="padding:16px 0"><div class="empty-sub">Sin datos</div></div>';
+      return Object.entries(sm).map(([k, v]) => {
+        const wr = Math.round(v.trades.filter(t => t.result > 0).length / v.trades.length * 100);
+        const avgR = (v.pnl / v.trades.length).toFixed(1);
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><div><div style="font-weight:500;font-size:13px">${k}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">${v.trades.length} trades</div></div><div style="display:flex;gap:20px;text-align:right"><div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px">WR</div><div class="${wr >= 50 ? 'pos' : 'neg'}" style="font-weight:600;font-family:'Geist Mono',monospace">${wr}%</div></div><div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px">Avg R</div><div class="${avgR >= 0 ? 'pos' : 'neg'}" style="font-weight:600;font-family:'Geist Mono',monospace">${avgR >= 0 ? '+' : ''}${avgR}R</div></div></div></div>`;
+      }).join('');
+    }
+    function renderEmotionAnalysis() {
+      const b = { high: [], mid: [], low: [] };
+      S.trades.forEach(t => { if (t.emotion >= 7) b.high.push(t.result); else if (t.emotion >= 4) b.mid.push(t.result); else b.low.push(t.result); });
+      const avg = a => a.length ? +(a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : null;
+      return `<div class="grid-3">${[{ label: 'Alto 7–10', arr: b.high, color: 'var(--green)' }, { label: 'Medio 4–6', arr: b.mid, color: 'var(--amber)' }, { label: 'Bajo 1–3', arr: b.low, color: 'var(--red)' }].map(d => `<div class="metric"><div class="metric-label">${d.label}</div><div class="metric-value" style="color:${d.color};font-size:20px">${avg(d.arr) !== null ? (avg(d.arr) >= 0 ? '+' : '') + avg(d.arr) + 'R' : '—'}</div><div class="metric-sub">${d.arr.length} trades${d.arr.length ? ' · ' + Math.round(d.arr.filter(r => r > 0).length / d.arr.length * 100) + '% WR' : ''}</div></div>`).join('')}</div>`;
+    }
+
+    // ── PLAN ─────────────────────────────────────────────
+    function renderPlan() {
+      const lastWeekTrades = getLastWeekTrades();
+      document.getElementById('main-content').innerHTML = `
+  <div class="section-header">
+    <div><h1>Plan Semanal</h1><p class="page-sub">Recap automático + estrategia con IA</p></div>
+    <button class="btn btn-primary" onclick="generateWeeklyPlan()"><i class="ti ti-wand"></i> Generar Plan</button>
+  </div>
+  <!-- Recap automático -->
+  ${renderWeeklyRecap(lastWeekTrades)}
+  <div id="plan-content" style="margin-top:16px">${S.weeklyPlan ? renderPlanContent(S.weeklyPlan) : `<div class="empty" style="padding:40px 0"><span class="empty-icon">📅</span><div class="empty-title">Sin plan esta semana</div><div class="empty-sub">Genera tu plan personalizado</div></div>`}</div>`;
+    }
+
+    function getLastWeekTrades() {
+      const wStart = new Date(Date.now() - 7 * 86400000);
+      return S.trades.filter(t => new Date(t.created_at) >= wStart);
+    }
+
+    function renderWeeklyRecap(trades) {
+      if (!trades.length) return `<div class="card"><div class="card-header"><span class="card-title">📊 Recap de la semana</span></div><p style="color:var(--text3);font-size:13px">Sin trades esta semana todavía.</p></div>`;
+      const wins = trades.filter(t => t.result > 0);
+      const wr = Math.round(wins.length / trades.length * 100);
+      const pnl = trades.reduce((a, b) => a + b.result, 0);
+      const rr = +(pnl / trades.length).toFixed(2);
+      const errors = {}; ERROR_TYPES.forEach(e => errors[e] = 0); trades.forEach(t => (t.errors || []).forEach(e => { if (errors[e] !== undefined) errors[e]++ }));
+      const topErrors = Object.entries(errors).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const avgScore = trades.filter(t => t.score).length ? Math.round(trades.filter(t => t.score).reduce((a, b) => a + (b.score || 0), 0) / trades.filter(t => t.score).length) : null;
+      const checklistPct = trades.reduce((acc, t) => { const cc = Object.values(t.checklist || {}).filter(v => v).length; const tc = Object.values(t.checklist || {}).length; return acc + (tc > 0 ? cc / tc : 0); }, 0) / trades.length * 100;
+      return `<div class="card">
+    <div class="card-header"><span class="card-title">📊 Recap automático — últimos 7 días</span></div>
+    <div class="grid-4" style="margin-bottom:14px">
+      <div class="metric"><div class="metric-label">PnL semana</div><div class="metric-value ${pnl >= 0 ? 'pos' : 'neg'}" style="font-size:22px">${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}R</div></div>
+      <div class="metric"><div class="metric-label">Win Rate</div><div class="metric-value ${wr >= 50 ? 'pos' : 'neg'}" style="font-size:22px">${wr}%</div><div class="metric-sub">${trades.length} trades</div></div>
+      <div class="metric"><div class="metric-label">RR Medio</div><div class="metric-value ${rr >= 0 ? 'pos' : 'neg'}" style="font-size:22px">${rr >= 0 ? '+' : ''}${rr}R</div></div>
+      <div class="metric"><div class="metric-label">Puntuación IA</div><div class="metric-value" style="font-size:22px;color:var(--lila)">${avgScore || '—'}<span style="font-size:13px;color:var(--text3)">/100</span></div></div>
+    </div>
+    <div class="grid-2">
+      <div>
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Checklist promedio</div>
+        <div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;margin-bottom:4px"><div style="height:100%;width:${Math.round(checklistPct)}%;background:${checklistPct >= 80 ? 'var(--green)' : checklistPct >= 50 ? 'var(--amber)' : 'var(--red)'};border-radius:4px"></div></div>
+        <div style="font-size:12px;color:var(--text2)">${Math.round(checklistPct)}% de cumplimiento</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Errores principales</div>
+        ${topErrors.length ? topErrors.map(([k, v]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:var(--text2)">${k}</span><span style="color:var(--red);font-family:'Geist Mono',monospace">${v}x</span></div>`).join('') : '<div style="font-size:12px;color:var(--green)">Sin errores frecuentes ✓</div>'}
+      </div>
+    </div>
+  </div>`;
+    }
+
+    async function generateWeeklyPlan() {
+      if (S.trades.length < 3) { showToast('Necesitas al menos 3 trades', 'warn'); return; }
+      document.getElementById('plan-content').innerHTML = '<div class="loading"><div class="spinner"></div> Generando plan con IA...</div>';
+      const s = calcStats(); const errors = calcErrors();
+      const topErr = Object.entries(errors).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k);
+      let plan;
+      try {
+        if (!S.apiKey) { plan = buildLocalPlan(s, topErr); }
+        else {
+          const prompt = `Coach trading prop firm. Plan semanal JSON sin markdown.\nDatos: WR=${s.wr}%,RR=${s.rr}R,PnL=${s.pnl}R,Trades=${s.count},MejorSetup="${s.bestSetup}",MejorSesión="${s.bestSession}",Errores=${topErr.join(',') || 'ninguno'}\nJSON español: {"resumen":"texto","fortalezas":["p1","p2","p3"],"debilidades":["p1","p2","p3"],"reglas":["r1","r2","r3","r4"],"setups_permitidos":["s1","s2"],"comportamientos_prohibidos":["c1","c2","c3"],"riesgo_max_diario":"XR","drawdown_max_semanal":"XR","objetivo_semanal":"XR","mensaje_motivacional":"frase"}`;
+          const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': S.apiKey, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }) });
+          const d = await res.json(); plan = JSON.parse(d.content[0].text.replace(/```json|```/g, '').trim());
+        }
+      } catch (e) { plan = buildLocalPlan(s, topErr); }
+      S.weeklyPlan = plan; await saveWeeklyPlan(plan);
+      document.getElementById('plan-content').innerHTML = renderPlanContent(plan);
+    }
+    function buildLocalPlan(s, topErr) { return { resumen: `WR ${s.wr}% con RR medio ${s.rr}R. Mejor: "${s.bestSetup}" en ${s.bestSession}.${topErr.length ? ' Corregir: ' + topErr.join(', ') : ' Sin errores frecuentes.'}`, fortalezas: [`Setup "${s.bestSetup}" funciona bien`, 'Consistencia en el registro', 'Datos suficientes'], debilidades: topErr.length ? topErr.map(e => `Alta frecuencia: ${e}`) : ['Necesitas más datos'], reglas: ['No operar sin checklist al 100%', 'Máximo 3 trades/día', 'Parar tras -2R diarios', `Priorizar ${s.bestSession}`], setups_permitidos: [s.bestSetup, 'Confirmación H1+'], comportamientos_prohibidos: ['Revenge trading', 'Sin checklist', 'FOMO'], riesgo_max_diario: '2R', drawdown_max_semanal: '4R', objetivo_semanal: `${Math.max(2, Math.round(s.rr * 3))}R`, mensaje_motivacional: 'La consistencia construye cuentas, la disciplina las mantiene.' }; }
+    function renderPlanContent(plan) {
+      return `<div class="ai-panel" style="margin-bottom:14px">
+    <div class="ai-header"><div class="ai-dot"></div><span class="ai-label">Plan generado por IA</span></div>
+    <p style="font-size:13px;color:var(--text);line-height:1.7;margin-top:8px">${plan.resumen}</p>
+    <div style="margin-top:14px;padding:12px 14px;background:var(--lila-dim);border-radius:var(--radius);border-left:2px solid var(--lila)"><p style="font-size:13px;color:var(--lila);font-style:italic">"${plan.mensaje_motivacional}"</p></div>
+  </div>
+  <div class="grid-3" style="margin-bottom:14px">
+    <div class="metric"><div class="metric-label">Riesgo máx diario</div><div class="metric-value neg" style="font-size:22px">${plan.riesgo_max_diario}</div></div>
+    <div class="metric"><div class="metric-label">Drawdown máx semanal</div><div class="metric-value neg" style="font-size:22px">${plan.drawdown_max_semanal}</div></div>
+    <div class="metric"><div class="metric-label">Objetivo semanal</div><div class="metric-value pos" style="font-size:22px">${plan.objetivo_semanal}</div></div>
+  </div>
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="plan-section"><div class="plan-section-title" style="color:var(--green)"><i class="ti ti-trending-up"></i> Fortalezas</div>${plan.fortalezas.map(f => `<div class="plan-rule"><span style="color:var(--green)">·</span>${f}</div>`).join('')}</div>
+    <div class="plan-section"><div class="plan-section-title" style="color:var(--red)"><i class="ti ti-alert-circle"></i> Debilidades</div>${plan.debilidades.map(f => `<div class="plan-rule"><span style="color:var(--red)">·</span>${f}</div>`).join('')}</div>
+  </div>
+  <div class="plan-section" style="margin-bottom:14px"><div class="plan-section-title" style="color:var(--lila)"><i class="ti ti-list-check"></i> Reglas</div>${plan.reglas.map((r, i) => `<div class="plan-rule"><span class="plan-rule-num">${i + 1}.</span>${r}</div>`).join('')}</div>
+  <div class="grid-2">
+    <div class="plan-section"><div class="plan-section-title" style="color:var(--green)">✓ Setups permitidos</div>${plan.setups_permitidos.map(s => `<div class="plan-rule"><span style="color:var(--green)">·</span>${s}</div>`).join('')}</div>
+    <div class="plan-section"><div class="plan-section-title" style="color:var(--red)">🚫 Prohibidos</div>${plan.comportamientos_prohibidos.map(s => `<div class="plan-rule"><span style="color:var(--red)">·</span>${s}</div>`).join('')}</div>
+  </div>`;
+    }
+
+    // ── HÁBITOS (CALENDARIO) ─────────────────────────────
+    let habitCalendarDate = new Date();
+
+    function getLast7Days() {
+      const days = []; for (let i = 6; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000); days.push({ date: d.toISOString().split('T')[0], label: i === 0 ? 'Hoy' : i === 1 ? 'Ayer' : d.toLocaleDateString('es-ES', { weekday: 'short' }) }); }
+      return days;
+    }
+    function calcStreak(h) {
+      let streak = 0; const d = new Date();
+      for (let i = 0; i < 365; i++) { const key = `${h.id}_${d.toISOString().split('T')[0]}`; if (S.habitLogs[key]) streak++; else if (i > 0) break; d.setDate(d.getDate() - 1); }
+      return streak;
+    }
+    function getDayPct(date) {
+      if (!S.habits.length) return null;
+      const done = S.habits.filter(h => S.habitLogs[`${h.id}_${date}`]).length;
+      return Math.round(done / S.habits.length * 100);
+    }
+
+    function renderHabitos() {
+      const today = new Date().toISOString().split('T')[0];
+      const completedToday = S.habits.filter(h => S.habitLogs[`${h.id}_${today}`]).length;
+      const total = S.habits.length;
+      const pct = total > 0 ? Math.round(completedToday / total * 100) : 0;
+      document.getElementById('main-content').innerHTML = `
+  <div class="section-header">
+    <div><h1>Hábitos</h1><p class="page-sub">Seguimiento continuo de tus rutinas</p></div>
+    <button class="btn btn-primary" onclick="openAddHabit()"><i class="ti ti-plus"></i> Nuevo Hábito</button>
+  </div>
+  ${total > 0 ? `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div><div style="font-size:15px;font-weight:600;letter-spacing:-0.02em">${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div><div style="font-size:12px;color:var(--text3);margin-top:3px">${completedToday} de ${total} completados hoy</div></div>
+      <div style="font-size:32px;font-weight:700;color:${pct === 100 ? 'var(--green)' : pct >= 50 ? 'var(--lila)' : 'var(--text2)'};letter-spacing:-0.04em">${pct}%</div>
+    </div>
+    <div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${pct === 100 ? 'var(--green)' : 'var(--lila)'};border-radius:3px;transition:width 0.4s ease"></div></div>
+  </div>`: ''}
+  <div class="grid-2" style="margin-bottom:16px">
+    <div id="habit-table-col">${renderHabitTable()}</div>
+    <div id="habit-calendar-col">${renderHabitCalendar()}</div>
+  </div>`;
+    }
+
+    function renderHabitTable() {
+      if (!S.habits.length) return `<div class="empty"><span class="empty-icon">🌱</span><div class="empty-title">Sin hábitos todavía</div><div class="empty-sub">Añade hábitos para hacer seguimiento continuo</div></div>`;
+      const days = getLast7Days(); const today = days[days.length - 1].date;
+      const catColors = { 'Físico': 'tag-green', 'Mental': 'tag-lila', 'Rutina': 'tag-blue', 'Trading': 'tag-amber', 'Otro': 'tag-gray' };
+      return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden">
+    <div style="display:grid;grid-template-columns:1fr repeat(7,38px);padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;gap:4px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Hábito</div>
+      ${days.map(d => `<div style="text-align:center"><div style="font-size:10px;color:${d.date === today ? 'var(--lila)' : 'var(--text3)'};font-weight:${d.date === today ? '600' : '400'};text-transform:uppercase">${d.label}</div><div style="font-size:9px;color:var(--text3)">${d.date.slice(8)}</div></div>`).join('')}
+    </div>
+    ${S.habits.map((h, hi) => {
+        const streak = calcStreak(h); const doneToday = S.habitLogs[`${h.id}_${today}`];
+        return `<div style="display:grid;grid-template-columns:1fr repeat(7,38px);padding:10px 14px;border-bottom:${hi < S.habits.length - 1 ? '1px solid var(--border)' : 'none'};align-items:center;gap:4px" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;padding-right:6px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name}</div>
+            <div style="display:flex;align-items:center;gap:4px;margin-top:2px">
+              <span class="tag ${catColors[h.category] || 'tag-gray'}" style="font-size:9px;padding:1px 4px">${h.category || 'Otro'}</span>
+              ${streak > 0 ? `<span style="font-size:10px;color:var(--amber)">🔥${streak}</span>` : ''}
+            </div>
+          </div>
+          <button onclick="event.stopPropagation();deleteHabit(${h.id})" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px;border-radius:3px;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'" title="Eliminar"><i class="ti ti-trash" style="font-size:12px"></i></button>
+        </div>
+        ${days.map(d => {
+          const k = `${h.id}_${d.date}`; const done = S.habitLogs[k]; const isToday = d.date === today;
+          return `<div style="display:flex;justify-content:center">
+            <div onclick="toggleHabitLog(${h.id},'${d.date}')" title="${done ? 'Hecho — clic para desmarcar' : 'Marcar como hecho'}"
+              style="width:${isToday ? '28px' : '20px'};height:${isToday ? '28px' : '20px'};border-radius:50%;cursor:pointer;border:${done ? 'none' : `1.5px ${isToday ? 'dashed' : 'solid'} ${isToday ? 'var(--lila)' : 'var(--border2)'}`};background:${done ? (isToday ? 'var(--lila)' : 'rgba(52,211,153,0.6)') : 'transparent'};display:flex;align-items:center;justify-content:center;transition:all 0.15s;box-shadow:${isToday && !done ? '0 0 0 3px var(--lila-dim)' : 'none'}"
+              onmouseover="if(!${done})this.style.background='var(--lila-dim)'" onmouseout="if(!${done})this.style.background='transparent'">
+              ${done ? `<i class="ti ti-check" style="font-size:${isToday ? '12px' : '9px'};color:#fff"></i>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+      }).join('')}
+  </div>
+  <!-- Resumen 7 días -->
+  <div style="margin-top:14px">
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:10px">Resumen últimos 7 días</div>
+    ${S.habits.map(h => { const done7 = getLast7Days().filter(d => S.habitLogs[`${h.id}_${d.date}`]).length; const p7 = Math.round(done7 / 7 * 100); return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div style="font-size:12px;color:var(--text2);min-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name}</div><div style="flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div style="height:100%;width:${p7}%;background:${p7 >= 80 ? 'var(--green)' : p7 >= 50 ? 'var(--lila)' : 'var(--text3)'};border-radius:3px"></div></div><div style="font-size:11px;color:var(--text3);min-width:28px;text-align:right;font-family:'Geist Mono',monospace">${done7}/7</div></div>`; }).join('')}
+  </div>`;
+    }
+
+    function renderHabitCalendar() {
+      const year = habitCalendarDate.getFullYear();
+      const month = habitCalendarDate.getMonth();
+      const monthName = habitCalendarDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const today = new Date().toISOString().split('T')[0];
+      const adjustedFirst = (firstDay === 0 ? 6 : firstDay - 1);
+      let cells = '';
+      for (let i = 0; i < adjustedFirst; i++)cells += `<div></div>`;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const pct = S.habits.length ? getDayPct(date) : null;
+        const isFuture = date > today; const isToday = date === today;
+        const bg = isFuture ? 'transparent' : pct === null ? 'var(--bg3)' : pct === 0 ? 'var(--red-dim)' : pct < 50 ? 'rgba(251,191,36,0.15)' : pct < 80 ? 'var(--lila-dim)' : 'var(--green-dim)';
+        const textColor = isFuture ? 'var(--text3)' : pct === null ? 'var(--text3)' : pct === 0 ? 'var(--red)' : pct < 50 ? 'var(--amber)' : pct < 80 ? 'var(--lila)' : 'var(--green)';
+        cells += `<div onclick="${!isFuture ? `openDayDetail('${date}')` : 'return'}" style="aspect-ratio:1;border-radius:6px;background:${bg};display:flex;align-items:center;justify-content:center;cursor:${isFuture ? 'default' : 'pointer'};border:${isToday ? '1.5px solid var(--lila)' : '1.5px solid transparent'};transition:all 0.15s;flex-direction:column;gap:1px" title="${date}${pct !== null ? ' — ' + pct + '%' : ''}"
+      onmouseover="${!isFuture ? `this.style.borderColor='var(--border2)'` : ''}" onmouseout="${!isFuture ? `this.style.borderColor='${isToday ? 'var(--lila)' : 'transparent'}'` : ''}">
+      <div style="font-size:11px;font-weight:${isToday ? '700' : '400'};color:${textColor}">${d}</div>
+      ${pct !== null && !isFuture ? `<div style="font-size:9px;color:${textColor};font-family:'Geist Mono',monospace">${pct}%</div>` : ''}
+    </div>`;
+      }
+      return `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <button onclick="changeHabitMonth(-1)" class="btn btn-ghost btn-sm"><i class="ti ti-chevron-left"></i></button>
+      <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em;text-transform:capitalize">${monthName}</div>
+      <button onclick="changeHabitMonth(1)" class="btn btn-ghost btn-sm"><i class="ti ti-chevron-right"></i></button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px">
+      ${['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'].map(d => `<div style="text-align:center;font-size:10px;color:var(--text3);font-weight:500;padding:2px 0">${d}</div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${cells}</div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      ${[{ color: 'var(--green-dim)', text: '≥80%' }, { color: 'var(--lila-dim)', text: '50-79%' }, { color: 'rgba(251,191,36,0.15)', text: '1-49%' }, { color: 'var(--red-dim)', text: '0%' }].map(l => `<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:${l.color}"></div><span style="font-size:10px;color:var(--text3)">${l.text}</span></div>`).join('')}
+    </div>
+  </div>`;
+    }
+
+    function changeHabitMonth(dir) {
+      habitCalendarDate = new Date(habitCalendarDate.getFullYear(), habitCalendarDate.getMonth() + dir, 1);
+      document.getElementById('habit-calendar-col').innerHTML = renderHabitCalendar();
+    }
+
+    function openDayDetail(date) {
+      if (!S.habits.length) return;
+      const done = S.habits.filter(h => S.habitLogs[`${h.id}_${date}`]);
+      const pending = S.habits.filter(h => !S.habitLogs[`${h.id}_${date}`]);
+      const pct = getDayPct(date);
+      const dayTrades = S.trades.filter(t => t.created_at?.slice(0, 10) === date);
+      const dayPnl = dayTrades.reduce((a, b) => a + b.result, 0);
+      const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'day-modal';
+      m.innerHTML = `<div class="modal" style="max-width:420px">
+    <div class="modal-title"><i class="ti ti-calendar" style="color:var(--lila)"></i> ${new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+    <div style="display:flex;gap:12px;margin-bottom:16px">
+      <div class="metric" style="flex:1;padding:12px"><div class="metric-label">Hábitos</div><div class="metric-value" style="font-size:24px;color:${pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--lila)' : 'var(--red)'}">${pct}%</div><div class="metric-sub">${done.length}/${S.habits.length}</div></div>
+      ${dayTrades.length ? `<div class="metric" style="flex:1;padding:12px"><div class="metric-label">Trading</div><div class="metric-value ${dayPnl >= 0 ? 'pos' : 'neg'}" style="font-size:24px">${dayPnl >= 0 ? '+' : ''}${dayPnl.toFixed(1)}R</div><div class="metric-sub">${dayTrades.length} trades</div></div>` : ''}
+    </div>
+    ${done.length ? `<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:8px">✓ Completados</div>${done.map(h => `<div style="font-size:13px;color:var(--text);padding:4px 0;display:flex;align-items:center;gap:8px"><i class="ti ti-check" style="color:var(--green);font-size:14px"></i>${h.name}</div>`).join('')}</div>` : ''}
+    ${pending.length ? `<div><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:8px">✗ No completados</div>${pending.map(h => `<div style="font-size:13px;color:var(--text2);padding:4px 0;display:flex;align-items:center;gap:8px"><i class="ti ti-x" style="color:var(--text3);font-size:14px"></i>${h.name}</div>`).join('')}</div>` : ''}
+    <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="closeModal('day-modal')">Cerrar</button></div>
+  </div>`;
+      document.body.appendChild(m);
+    }
+
+    function openAddHabit() {
+      const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'habit-modal';
+      m.innerHTML = `<div class="modal" style="max-width:420px">
+    <div class="modal-title"><i class="ti ti-leaf" style="color:var(--lila)"></i> Nuevo Hábito</div>
+    <div class="form-group"><label class="form-label">Nombre</label><input type="text" class="form-input" id="h-name" placeholder="ej: Meditación, Ejercicio, Lectura..."></div>
+    <div class="form-group"><label class="form-label">Categoría</label><select class="form-input" id="h-cat">${HABIT_CATS.map(c => `<option>${c}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Nota (opcional)</label><input type="text" class="form-input" id="h-note" placeholder="Descripción breve"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('habit-modal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="submitHabit()"><i class="ti ti-check"></i> Añadir</button>
+    </div>
+  </div>`;
+      document.body.appendChild(m);
+      setTimeout(() => { const el = document.getElementById('h-name'); if (el) { el.focus(); el.addEventListener('keydown', e => { if (e.key === 'Enter') submitHabit(); }); } }, 50);
+    }
+    async function submitHabit() {
+      const name = document.getElementById('h-name').value.trim();
+      if (!name) { showToast('Escribe el nombre', 'warn'); return; }
+      const cat = document.getElementById('h-cat').value; const note = document.getElementById('h-note').value;
+      try {
+        const { data, error } = await sb.from('habits').insert({ user_id: S.user.id, name, category: cat, note }).select().single();
+        if (error) throw error; S.habits.push(data); closeModal('habit-modal'); showPage('habitos'); showToast('Hábito añadido', 'success');
+      } catch (e) { showToast('Error: ' + e.message, 'warn'); }
+    }
+    async function toggleHabitLog(habitId, date) {
+      const k = `${habitId}_${date}`; const done = !S.habitLogs[k]; S.habitLogs[k] = done;
+      try {
+        if (done) { await sb.from('habit_logs').upsert({ user_id: S.user.id, habit_id: habitId, log_date: date, done: true }, { onConflict: 'user_id,habit_id,log_date' }); }
+        else { await sb.from('habit_logs').delete().eq('user_id', S.user.id).eq('habit_id', habitId).eq('log_date', date); }
+      } catch (e) { console.error(e); }
+      document.getElementById('habit-table-col').innerHTML = renderHabitTable();
+      document.getElementById('habit-calendar-col').innerHTML = renderHabitCalendar();
+    }
+    async function deleteHabit(id) {
+      if (!confirm('¿Eliminar este hábito y todo su historial?')) return;
+      try {
+        await sb.from('habit_logs').delete().eq('habit_id', id).eq('user_id', S.user.id);
+        await sb.from('habits').delete().eq('id', id).eq('user_id', S.user.id);
+        S.habits = S.habits.filter(h => h.id !== id); Object.keys(S.habitLogs).filter(k => k.startsWith(id + '_')).forEach(k => delete S.habitLogs[k]);
+        showPage('habitos'); showToast('Hábito eliminado');
+      } catch (e) { showToast('Error', 'warn'); }
+    }
+
+    // ── DIARIO ───────────────────────────────────────────
+    function renderDiario() {
+      const today = new Date().toISOString().split('T')[0];
+      const todayEntry = S.diaryEntries.find(e => e.entry_date === today) || {};
+      const hasPM = S.premarket?.entry_date === today;
+      document.getElementById('main-content').innerHTML = `
+  <div class="section-header"><div><h1>Diario Mental</h1><p class="page-sub">Registro emocional y pre-market diario</p></div></div>
+
+  <div class="grid-2" style="margin-bottom:16px">
+    <!-- Pre-market -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">☀️ Pre-market hoy</span>${hasPM ? '<span class="tag tag-green">Completado</span>' : ''}</div>
+      ${hasPM ? `
+      <div style="font-size:13px;color:var(--text2);line-height:1.7">
+        <div style="margin-bottom:6px"><span style="color:var(--text3)">Bias:</span> ${S.premarket.bias || '—'}</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text3)">Sesiones:</span> ${S.premarket.sessions || '—'}</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text3)">Riesgo máx:</span> ${S.premarket.max_risk || '—'}</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text3)">Notas:</span> ${S.premarket.notes || '—'}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="openPremarket()"><i class="ti ti-edit"></i> Editar</button>`: `
+      <p style="font-size:13px;color:var(--text3);margin-bottom:14px">Prepara tu sesión respondiendo 4 preguntas clave antes de operar.</p>
+      <button class="btn btn-primary" onclick="openPremarket()"><i class="ti ti-sun"></i> Completar pre-market</button>`}
+    </div>
+
+    <!-- Entrada diaria -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">🧠 Cómo me siento hoy</span></div>
+      <div class="form-group">
+        <label class="form-label">Estado emocional general (1–10)</label>
+        <div class="emotion-track" id="diary-emotion-track">
+          ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `<button class="emotion-btn ${(todayEntry.mood || 7) == i ? 'selected' : ''}" onclick="selectDiaryMood(${i})">${i}</button>`).join('')}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">¿Cómo te sientes antes de operar hoy?</label>
+        <textarea class="form-input" id="diary-text" placeholder="Mentalidad, energía, preocupaciones..." style="min-height:80px">${todayEntry.content || ''}</textarea>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveDiaryToday()"><i class="ti ti-check"></i> Guardar entrada</button>
+    </div>
+  </div>
+
+  <!-- Historial del diario -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Historial reciente</span></div>
+    ${S.diaryEntries.length ? S.diaryEntries.slice(0, 7).map(e => {
+        const dayTrades = S.trades.filter(t => t.created_at?.slice(0, 10) === e.entry_date);
+        const dayPnl = dayTrades.reduce((a, b) => a + b.result, 0);
+        return `<div style="display:flex;align-items:flex-start;gap:14px;padding:12px 0;border-bottom:1px solid var(--border)">
+        <div style="text-align:center;min-width:40px">
+          <div style="font-size:20px;font-weight:700;color:${(e.mood || 5) >= 7 ? 'var(--green)' : (e.mood || 5) >= 4 ? 'var(--amber)' : 'var(--red)'};">${e.mood || '—'}</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase">humor</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:4px">${new Date(e.entry_date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' })}</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.content || 'Sin nota'}</div>
+        </div>
+        ${dayTrades.length ? `<div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:600;color:${dayPnl >= 0 ? 'var(--green)' : 'var(--red)'}">${dayPnl >= 0 ? '+' : ''}${dayPnl.toFixed(1)}R</div><div style="font-size:11px;color:var(--text3)">${dayTrades.length} trades</div></div>` : ''}
+      </div>`;
+      }).join('') : '<div class="empty" style="padding:20px 0"><span class="empty-icon">📝</span><div class="empty-sub">Sin entradas todavía</div></div>'}
+  </div>`;
+      window._diaryMood = todayEntry.mood || 7;
+    }
+
+    function selectDiaryMood(v) {
+      window._diaryMood = v;
+      document.querySelectorAll('#diary-emotion-track .emotion-btn').forEach(b => b.classList.toggle('selected', parseInt(b.textContent) === v));
+    }
+
+    async function saveDiaryToday() {
+      const today = new Date().toISOString().split('T')[0];
+      const content = document.getElementById('diary-text').value;
+      const mood = window._diaryMood || 7;
+      const saved = await saveDiaryEntry({ entry_date: today, content, mood });
+      if (saved) {
+        const idx = S.diaryEntries.findIndex(e => e.entry_date === today);
+        if (idx >= 0) S.diaryEntries[idx] = saved; else S.diaryEntries.unshift(saved);
+        showToast('Entrada guardada', 'success');
+      }
+    }
+
+    function openPremarket() {
+      const today = new Date().toISOString().split('T')[0];
+      const pm = S.premarket?.entry_date === today ? S.premarket : {};
+      const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pm-modal';
+      m.innerHTML = `<div class="modal" style="max-width:480px">
+    <div class="modal-title"><i class="ti ti-sun" style="color:var(--amber)"></i> Pre-market — ${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' })}</div>
+    <div class="form-group"><label class="form-label">¿Cuál es el bias del mercado hoy?</label><input type="text" class="form-input" id="pm-bias" placeholder="Ej: Alcista en XAUUSD, bajista en NAS100..." value="${pm.bias || ''}"></div>
+    <div class="form-group"><label class="form-label">¿Qué sesiones vas a operar?</label><select class="form-input" id="pm-sessions"><option ${pm.sessions === 'Londres' ? 'selected' : ''}>Londres</option><option ${pm.sessions === 'Nueva York' ? 'selected' : ''}>Nueva York</option><option ${pm.sessions === 'Asia' ? 'selected' : ''}>Asia</option><option ${pm.sessions === 'Londres + NY' ? 'selected' : ''}>Londres + NY</option><option ${pm.sessions === 'Todas' ? 'selected' : ''}>Todas</option></select></div>
+    <div class="form-group"><label class="form-label">¿Cuál es tu riesgo máximo hoy?</label><input type="text" class="form-input" id="pm-risk" placeholder="Ej: 2R máximo, 3 trades máximo" value="${pm.max_risk || ''}"></div>
+    <div class="form-group"><label class="form-label">Notas adicionales / niveles clave</label><textarea class="form-input" id="pm-notes" placeholder="Soportes, resistencias, eventos macro...">${pm.notes || ''}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('pm-modal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="submitPremarket()"><i class="ti ti-check"></i> Guardar pre-market</button>
+    </div>
+  </div>`;
+      document.body.appendChild(m);
+    }
+
+    async function submitPremarket() {
+      const today = new Date().toISOString().split('T')[0];
+      const pm = { entry_date: today, bias: document.getElementById('pm-bias').value, sessions: document.getElementById('pm-sessions').value, max_risk: document.getElementById('pm-risk').value, notes: document.getElementById('pm-notes').value };
+      await savePremarket(pm); closeModal('pm-modal'); showToast('Pre-market guardado', 'success');
+      if (S.currentPage === 'diario') renderDiario();
+      if (S.currentPage === 'dashboard') renderDashboard();
+    }
+
+    // ── OBJETIVOS ────────────────────────────────────────
+    function renderObjetivos() {
+      const month = new Date().toISOString().slice(0, 7);
+      const monthName = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+      const monthTrades = S.trades.filter(t => t.created_at?.slice(0, 7) === month);
+      const monthPnl = monthTrades.reduce((a, b) => a + b.result, 0);
+      const s = calcStats();
+
+      // Badges
+      const badges = calcBadges();
+
+      document.getElementById('main-content').innerHTML = `
+  <div class="section-header"><div><h1>Objetivos & Logros</h1><p class="page-sub">Metas mensuales y disciplina gamificada</p></div></div>
+
+  <!-- Objetivo mensual -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><span class="card-title">🎯 Objetivo mensual — ${monthName}</span></div>
+    ${S.monthlyGoal ? `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-size:13px;color:var(--text2)">Objetivo: <span style="color:var(--text);font-weight:600">+${S.monthlyGoal.target_r}R</span></div>
+        <div style="font-size:13px;color:var(--text2);margin-top:4px">Actual: <span class="${monthPnl >= 0 ? 'pos' : 'neg'}" style="font-weight:600">${monthPnl >= 0 ? '+' : ''}${monthPnl.toFixed(1)}R</span></div>
+      </div>
+      <div style="font-size:40px;font-weight:700;letter-spacing:-0.04em;color:${monthPnl >= S.monthlyGoal.target_r ? 'var(--green)' : monthPnl >= 0 ? 'var(--lila)' : 'var(--red)'}">
+        ${Math.min(100, Math.max(0, Math.round(monthPnl / S.monthlyGoal.target_r * 100)))}%
+      </div>
+    </div>
+    <div style="height:10px;background:var(--bg4);border-radius:5px;overflow:hidden;margin-bottom:12px">
+      <div style="height:100%;width:${Math.min(100, Math.max(0, Math.round(monthPnl / S.monthlyGoal.target_r * 100)))}%;background:${monthPnl >= S.monthlyGoal.target_r ? 'var(--green)' : 'var(--lila)'};border-radius:5px;transition:width 0.5s ease"></div>
+    </div>
+    <div style="font-size:12px;color:var(--text3)">Te quedan <strong style="color:var(--text)">${Math.max(0, (S.monthlyGoal.target_r - monthPnl)).toFixed(1)}R</strong> para alcanzar tu objetivo · ${monthTrades.length} trades este mes</div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="openSetGoal()"><i class="ti ti-edit"></i> Cambiar objetivo</button>`: `
+    <p style="font-size:13px;color:var(--text3);margin-bottom:14px">Define tu objetivo de R para este mes y haz seguimiento en tiempo real.</p>
+    <button class="btn btn-primary" onclick="openSetGoal()"><i class="ti ti-target"></i> Establecer objetivo</button>`}
+  </div>
+
+  <!-- Racha de disciplina -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><span class="card-title">🔔 Racha de disciplina</span></div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div style="text-align:center">
+        <div style="font-size:48px;font-weight:700;letter-spacing:-0.04em;color:${s.disciplineStreak >= 7 ? 'var(--green)' : s.disciplineStreak >= 3 ? 'var(--lila)' : 'var(--text2)'};line-height:1">${s.disciplineStreak}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">días consecutivos</div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:13px;color:var(--text);margin-bottom:8px">${s.disciplineStreak >= 7 ? '🏆 Semana perfecta de disciplina' : s.disciplineStreak >= 3 ? '💪 Buena racha, sigue así' : s.disciplineStreak >= 1 ? '🌱 Empezando a construir hábito' : '📈 Opera con checklist completa (≥80%) para comenzar tu racha'}</div>
+        <div style="font-size:12px;color:var(--text3)">Días operando con checklist ≥ 80% completada de forma consecutiva</div>
+        <div style="margin-top:10px;display:flex;gap:6px">
+          ${[1, 3, 7, 14, 30].map(goal => `<div style="text-align:center;padding:6px 10px;background:${s.disciplineStreak >= goal ? 'var(--lila-dim)' : 'var(--bg3)'};border:1px solid ${s.disciplineStreak >= goal ? 'var(--lila)' : 'var(--border)'};border-radius:var(--radius)"><div style="font-size:13px;font-weight:600;color:${s.disciplineStreak >= goal ? 'var(--lila)' : 'var(--text3)'}">${goal}d</div></div>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Badges / Logros -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">🏆 Logros</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
+      ${badges.map(b => `<div style="background:${b.earned ? 'var(--lila-dim)' : 'var(--bg3)'};border:1px solid ${b.earned ? 'rgba(167,139,250,0.3)' : 'var(--border)'};border-radius:var(--radius-lg);padding:14px;text-align:center;opacity:${b.earned ? '1' : '0.5'}">
+        <div style="font-size:28px;margin-bottom:8px">${b.emoji}</div>
+        <div style="font-size:12px;font-weight:600;color:${b.earned ? 'var(--text)' : 'var(--text3)'};margin-bottom:4px">${b.name}</div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.4">${b.desc}</div>
+        ${b.earned ? '<div style="font-size:10px;color:var(--lila);margin-top:6px;font-weight:600">✓ Desbloqueado</div>' : ''}
+      </div>`).join('')}
+    </div>
+  </div>`;
+    }
+
+    function calcBadges() {
+      const s = calcStats();
+      const today = new Date().toISOString().split('T')[0];
+      const monthTrades = S.trades.filter(t => t.created_at?.slice(0, 7) === new Date().toISOString().slice(0, 7));
+      return [
+        { emoji: '📝', name: 'Primer trade', desc: 'Registra tu primer trade', earned: S.trades.length >= 1 },
+        { emoji: '🔟', name: '10 trades', desc: 'Registra 10 trades', earned: S.trades.length >= 10 },
+        { emoji: '💯', name: '100 trades', desc: 'Registra 100 trades', earned: S.trades.length >= 100 },
+        { emoji: '✅', name: 'Disciplinado', desc: '3 días consecutivos con checklist ≥80%', earned: s.disciplineStreak >= 3 },
+        { emoji: '🔥', name: 'Racha semanal', desc: '7 días seguidos con checklist completa', earned: s.disciplineStreak >= 7 },
+        { emoji: '🏆', name: 'Mes perfecto', desc: '30 días de disciplina seguidos', earned: s.disciplineStreak >= 30 },
+        { emoji: '📈', name: 'Rentable', desc: 'WR superior al 50%', earned: s.wr >= 50 },
+        { emoji: '💎', name: 'Elite', desc: 'WR superior al 65%', earned: s.wr >= 65 },
+        { emoji: '🧘', name: 'Sin revenge', desc: 'Sin errores de revenge trading', earned: !S.trades.some(t => (t.errors || []).includes('Revenge Trading')) },
+        { emoji: '🌱', name: 'Hábitos iniciados', desc: 'Al menos 3 hábitos activos', earned: S.habits.length >= 3 },
+        { emoji: '🗓️', name: 'Mes activo', desc: '15+ trades en un mes', earned: monthTrades.length >= 15 },
+        { emoji: '⚡', name: 'RR positivo', desc: 'RR medio por encima de 1.5R', earned: s.rr >= 1.5 },
+      ];
+    }
+
+    function openSetGoal() {
+      const month = new Date().toISOString().slice(0, 7);
+      const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'goal-modal';
+      m.innerHTML = `<div class="modal" style="max-width:400px">
+    <div class="modal-title"><i class="ti ti-target" style="color:var(--lila)"></i> Objetivo mensual</div>
+    <div class="form-group"><label class="form-label">Objetivo de R para este mes</label><input type="number" step="0.5" class="form-input" id="goal-r" placeholder="ej: 10" value="${S.monthlyGoal?.target_r || ''}"></div>
+    <div class="form-group"><label class="form-label">Notas (opcional)</label><textarea class="form-input" id="goal-notes" placeholder="Estrategia, condiciones...">${S.monthlyGoal?.notes || ''}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('goal-modal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="submitGoal()"><i class="ti ti-check"></i> Guardar</button>
+    </div>
+  </div>`;
+      document.body.appendChild(m);
+      setTimeout(() => document.getElementById('goal-r').focus(), 50);
+    }
+    async function submitGoal() {
+      const r = parseFloat(document.getElementById('goal-r').value);
+      if (isNaN(r) || r <= 0) { showToast('Introduce un objetivo válido', 'warn'); return; }
+      const month = new Date().toISOString().slice(0, 7);
+      await saveMonthlyGoal({ month, target_r: r, notes: document.getElementById('goal-notes').value });
+      closeModal('goal-modal'); showPage('objetivos'); showToast('Objetivo guardado', 'success');
+    }
+
+    // ── CONFIG ───────────────────────────────────────────
+    function renderConfig() {
+      document.getElementById('main-content').innerHTML = `
+  <div class="section-header"><div><h1>Configuración</h1><p class="page-sub">Personaliza tu experiencia</p></div></div>
+  <div class="grid-2">
+    <div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header"><span class="card-title">API Key Anthropic (opcional)</span></div>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.7">Sin API key la IA funciona en modo local. Con tu clave obtendrás análisis más precisos.</p>
+        <div class="form-group"><input type="password" class="form-input" id="api-key-input" placeholder="sk-ant-..." value="${S.apiKey}"></div>
+        <button class="btn btn-primary btn-sm" onclick="saveApiKey()"><i class="ti ti-check"></i> Guardar clave</button>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Exportar datos</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="exportData()"><i class="ti ti-download"></i> Descargar JSON</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Checklist de trading</span><button class="btn btn-ghost btn-sm" onclick="addCheckItem()"><i class="ti ti-plus"></i> Añadir</button></div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Aparece al registrar cada trade.</p>
+      <div id="cl-config">${renderCLConfig()}</div>
+    </div>
+  </div>`;
+    }
+    function renderCLConfig() { return S.checklist.map(c => `<div class="check-item"><div class="check-box ${c.active ? 'checked' : ''}" onclick="toggleCLItem(${c.id})">${c.active ? '<i class="ti ti-check" style="font-size:11px;color:#fff"></i>' : ''}</div><input type="text" value="${c.label}" onchange="updateCLLabel(${c.id},this.value)" style="flex:1;background:transparent;border:none;color:var(--text);font-family:'Geist','Inter',sans-serif;font-size:13px;outline:none"><button onclick="removeCLItem(${c.id})" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 4px;font-size:13px"><i class="ti ti-x"></i></button></div>`).join(''); }
+    async function toggleCLItem(id) { const c = S.checklist.find(x => x.id === id); if (c) c.active = !c.active; await saveChecklistCfg(); document.getElementById('cl-config').innerHTML = renderCLConfig(); }
+    async function updateCLLabel(id, val) { const c = S.checklist.find(x => x.id === id); if (c) c.label = val; await saveChecklistCfg(); }
+    async function addCheckItem() { S.checklist.push({ id: Date.now(), label: 'Nuevo check', active: true }); await saveChecklistCfg(); document.getElementById('cl-config').innerHTML = renderCLConfig(); }
+    async function removeCLItem(id) { S.checklist = S.checklist.filter(c => c.id !== id); await saveChecklistCfg(); document.getElementById('cl-config').innerHTML = renderCLConfig(); }
+    function saveApiKey() { S.apiKey = document.getElementById('api-key-input').value.trim(); localStorage.setItem('mm_key', S.apiKey); showToast('API Key guardada', 'success'); }
+    function exportData() { const b = new Blob([JSON.stringify(S.trades, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'marketmind_trades.json'; a.click(); }
+
+    // ── UTILS ────────────────────────────────────────────
+    function closeModal(id) { const m = document.getElementById(id); if (m) m.remove(); }
+    function showToast(msg, type = 'info') {
+      const t = document.getElementById('toast'); t.textContent = msg;
+      t.style.borderColor = type === 'success' ? 'var(--green)' : type === 'warn' ? 'var(--amber)' : 'var(--border2)';
+      t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3500);
+    }
+    document.getElementById('auth-password').addEventListener('keydown', e => { if (e.key === 'Enter') handleAuth(); });
+  </script>
+</body>
+
+</html>
