@@ -144,16 +144,12 @@
     }
     function showAuthError(msg) { const el = document.getElementById('auth-error'); el.textContent = msg; el.style.display = 'block'; }
     async function handleLogout() {
-      try { await sb.auth.signOut(); } catch (e) { }
-      S = { user: null, trades: [], checklist: [...DEFAULT_CL], weeklyPlan: null, apiKey: localStorage.getItem('mm_key') || '', equityChart: null, currentPage: 'dashboard', habits: [], habitLogs: {}, diaryEntries: [], monthlyGoal: null, premarket: {}, setupChart: null, periodChart: null };
-      document.getElementById('app').style.display = 'none';
-      document.getElementById('auth-screen').style.display = 'flex';
-      document.getElementById('auth-email').value = '';
-      document.getElementById('auth-password').value = '';
-      document.getElementById('auth-error').style.display = 'none';
-      document.getElementById('auth-btn').textContent = 'Entrar';
-      document.getElementById('auth-btn').disabled = false;
-      switchAuthTab('login');
+      try { await Promise.race([sb.auth.signOut(), new Promise(r => setTimeout(r, 1500))]); } catch (e) { }
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.includes('supabase')) localStorage.removeItem(key);
+      }
+      window.location.reload();
     }
     let isInitialAuthLoad = true;
     sb.auth.onAuthStateChange(async (event, session) => {
@@ -216,7 +212,10 @@
       const row = { user_id: S.user.id, pair: t.pair, direction: t.direction, result: t.result, rr: t.result, setup: t.setup, session: t.session, timeframe: t.timeframe, emotion: t.emotion, confidence: t.confidence, stress: t.stress, notes: t.notes || '', checklist: t.checklist || {}, score: null, errors: [], feedback: null, duration_minutes: t.duration_minutes || null };
       if (t.screenshot_url !== undefined) row.screenshot_url = t.screenshot_url;
       try {
-        const { data, error } = await sb.from('trades').insert(row).select().single();
+        const { data, error } = await Promise.race([
+          sb.from('trades').insert(row).select().single(),
+          new Promise((_, r) => setTimeout(() => r(new Error('Tiempo de espera excedido')), 10000))
+        ]);
         if (error) {
           if (error.message && (error.message.includes('screenshot_url') || error.message.includes('duration_minutes'))) {
             delete row.screenshot_url; delete row.duration_minutes;
@@ -237,7 +236,10 @@
       try {
         const ext = file.name.split('.').pop().toLowerCase();
         const path = `${S.user.id}/${Date.now()}.${ext}`;
-        const { error } = await sb.storage.from('screenshots').upload(path, file, { upsert: true, contentType: file.type });
+        const { error } = await Promise.race([
+          sb.storage.from('screenshots').upload(path, file, { upsert: true, contentType: file.type }),
+          new Promise((_, r) => setTimeout(() => r(new Error('Tiempo excedido al subir imagen')), 15000))
+        ]);
         if (error) throw error;
         return sb.storage.from('screenshots').getPublicUrl(path).data.publicUrl;
       } catch (e) { showToast('Imagen no subida, trade se guarda sin ella', 'warn'); return null; }
