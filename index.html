@@ -54,10 +54,8 @@
             class="ti ti-list"></i><span>Trades</span></button>
         <button class="nav-btn" onclick="showPage('analisis')" id="nav-analisis"><i
             class="ti ti-brain"></i><span>Análisis IA</span></button>
-        <button class="nav-btn" onclick="showPage('objetivos')" id="nav-objetivos"><i
-            class="ti ti-target"></i><span>Objetivos</span></button>
-        <button class="nav-btn" onclick="S.psicoTab='habitos';showPage('objetivos')" id="nav-habitos"><i
-            class="ti ti-check"></i><span>Hábitos</span></button>
+        <button class="nav-btn" onclick="showPage('habitos')" id="nav-habitos"><i
+            class="ti ti-leaf"></i><span>Hábitos</span></button>
         <button class="nav-btn" onclick="showPage('cuaderno')" id="nav-cuaderno"><i
             class="ti ti-notebook"></i><span>Cuaderno</span></button>
         <button class="nav-btn" onclick="showPage('config')" id="nav-config"><i
@@ -324,7 +322,7 @@
       const todayTrades = S.trades.filter(t => t.created_at?.slice(0, 10) === today);
       const todayPnl = todayTrades.reduce((a, b) => a + b.result, 0);
       const recent3 = S.trades.slice(-3);
-      
+
       let habitPct = 100;
       if (S.habits && S.habits.length > 0) {
         const done = S.habits.filter(h => S.habitLogs[`${h.id}_${today}`]).length;
@@ -444,7 +442,7 @@
       if (S.equityChart) { S.equityChart.destroy(); S.equityChart = null; }
       if (S.setupChart) { S.setupChart.destroy(); S.setupChart = null; }
       if (S.periodChart) { S.periodChart.destroy(); S.periodChart = null; }
-      const pages = { dashboard: renderDashboard, trades: renderTrades, analisis: renderAnalisis, objetivos: renderPsicologia, cuaderno: renderCuaderno, config: renderConfig, guia: renderGuia };
+      const pages = { dashboard: renderDashboard, trades: renderTrades, analisis: renderAnalisis, habitos: renderPsicologia, cuaderno: renderCuaderno, config: renderConfig, guia: renderGuia };
       document.getElementById('main-content').innerHTML = '';
       if (pages[page]) pages[page]();
     }
@@ -1005,7 +1003,7 @@
       const completedToday = S.habits.filter(h => S.habitLogs[`${h.id}_${today}`]).length;
       const total = S.habits.length;
       const pct = total > 0 ? Math.round(completedToday / total * 100) : 0;
-      
+
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
       container.innerHTML = `
   <div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
@@ -1053,7 +1051,7 @@
             <div onclick="toggleHabitLog(${h.id},'${d.date}')" title="${done ? 'Hecho — clic para desmarcar' : 'Marcar como hecho'}"
               style="width:${isToday ? '28px' : '20px'};height:${isToday ? '28px' : '20px'};border-radius:50%;cursor:pointer;border:${done ? 'none' : `1.5px ${isToday ? 'dashed' : 'solid'} ${isToday ? 'var(--lila)' : 'var(--border2)'}`};background:${done ? (isToday ? 'var(--lila)' : 'rgba(52,211,153,0.6)') : 'transparent'};display:flex;align-items:center;justify-content:center;transition:all 0.15s;box-shadow:${isToday && !done ? '0 0 0 3px var(--lila-dim)' : 'none'}"
               onmouseover="if(!${done})this.style.background='var(--lila-dim)'" onmouseout="if(!${done})this.style.background='transparent'">
-              ${done ? `<i class="ti ti-check" style="font-size:${isToday ? '12px' : '9px'};color:#fff"></i>` : ''}
+              ${done ? `<i class="ti ti-leaf" style="font-size:${isToday ? '12px' : '9px'};color:#fff"></i>` : ''}
             </div>
           </div>`;
         }).join('')}
@@ -1179,7 +1177,7 @@
       const today = new Date().toISOString().split('T')[0];
       const todayEntry = S.diaryEntries.find(e => e.entry_date === today) || {};
       const hasPM = S.premarket?.entry_date === today;
-      
+
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
       container.innerHTML = `
   <div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
@@ -1395,21 +1393,17 @@
       closeModal('goal-modal'); S.psicoTab = 'objetivos'; showPage('objetivos'); showToast('Objetivo guardado', 'success');
     }
 
-    // ── OBJETIVOS (Agrupador: Objetivos + Hábitos + Diario) ──
+    // ── HÁBITOS Y DIARIO ──
     function switchPsicoTab(tab) { S.psicoTab = tab; renderPsicologia(); }
     function renderPsicologia() {
+      if (S.psicoTab === 'objetivos') S.psicoTab = 'habitos';
       document.getElementById('main-content').innerHTML = `
-        <div class="section-header" style="margin-bottom:12px">
-          <div><h1>Objetivos</h1><p class="page-sub">Metas, Hábitos y Diario Personal</p></div>
-        </div>
-        <div class="tabs-container">
-          <button class="tab-btn ${S.psicoTab === 'objetivos' ? 'active' : ''}" onclick="switchPsicoTab('objetivos')">🎯 Objetivos</button>
-          <button class="tab-btn ${S.psicoTab === 'habitos' ? 'active' : ''}" onclick="switchPsicoTab('habitos')">✓ Hábitos</button>
+        <div class="tabs-container" style="margin-bottom:12px; margin-top:8px">
+          <button class="tab-btn ${S.psicoTab === 'habitos' ? 'active' : ''}" onclick="switchPsicoTab('habitos')">🌱 Hábitos</button>
           <button class="tab-btn ${S.psicoTab === 'diario' ? 'active' : ''}" onclick="switchPsicoTab('diario')">📓 Diario Personal</button>
         </div>
         <div id="sub-content"></div>
       `;
-      if (S.psicoTab === 'objetivos') renderObjetivos(true);
       if (S.psicoTab === 'habitos') renderHabitos(true);
       if (S.psicoTab === 'diario') renderDiario(true);
     }
@@ -1440,7 +1434,7 @@
       </div>`;
       if (S.apuntes.length) {
         html += '<div class="grid-2" style="margin-top:8px">';
-        S.apuntes.forEach(function(a) {
+        S.apuntes.forEach(function (a) {
           html += '<div class="card" style="padding:0;overflow:hidden;cursor:pointer;transition:all 0.2s" onclick="openApunteDetail(' + a.id + ')">';
           if (a.image_url) {
             html += '<img src="' + a.image_url + '" style="width:100%;height:140px;object-fit:cover;border-bottom:1px solid var(--border)">';
@@ -1518,7 +1512,7 @@
     async function deleteApunte(id) {
       if (!confirm('¿Eliminar apunte?')) return;
       S.apuntes = S.apuntes.filter(x => x.id !== id); renderCuaderno();
-      try { await sb.from('apuntes').delete().eq('id', id).eq('user_id', S.user.id); } catch(e){}
+      try { await sb.from('apuntes').delete().eq('id', id).eq('user_id', S.user.id); } catch (e) { }
     }
 
     // ── CONFIG ───────────────────────────────────────────
