@@ -875,8 +875,8 @@
 
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
       container.innerHTML = `
-  <div class="${isSub ? '' : 'section-header'}">
-    ${isSub ? '' : '<div><h1>Objetivos</h1><p class="page-sub">Foco mensual en R</p></div>'}
+  <div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
+    <div><h1>Objetivos</h1><p class="page-sub">Foco mensual en R</p></div>
     <button class="btn btn-primary" onclick="openAddGoal()"><i class="ti ti-target"></i> ${g ? 'Editar Meta' : 'Definir Meta'}</button>
   </div>
   ${g ? `
@@ -894,9 +894,9 @@
     function renderPlan(isSub = false) {
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
       container.innerHTML = `
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-    ${isSub ? '' : '<div><h1>Plan Semanal</h1><p class="page-sub">Reglas claras, ejecución perfecta</p></div>'}
-    <button class="btn btn-primary" onclick="generateWeeklyPlan()" style="margin-left:auto"><i class="ti ti-wand"></i> Generar Plan</button>
+  <div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
+    <div><h1>Plan Semanal</h1><p class="page-sub">Reglas claras, ejecución perfecta</p></div>
+    <button class="btn btn-primary" onclick="generateWeeklyPlan()"><i class="ti ti-wand"></i> Generar Plan</button>
   </div>
   <!-- Recap automático -->
   ${renderWeeklyRecap(getLastWeekTrades())}
@@ -1006,8 +1006,8 @@
       
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
       container.innerHTML = `
-  <div class="${isSub ? '' : 'section-header'}">
-    ${isSub ? '' : '<div><h1>Hábitos</h1><p class="page-sub">Seguimiento continuo de tus rutinas</p></div>'}
+  <div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
+    <div><h1>Hábitos</h1><p class="page-sub">Seguimiento continuo de tus rutinas</p></div>
     <button class="btn btn-primary" onclick="openAddHabit()"><i class="ti ti-plus"></i> Nuevo Hábito</button>
   </div>
   ${total > 0 ? `<div class="card" style="margin-bottom:16px">
@@ -1180,7 +1180,9 @@
       
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
       container.innerHTML = `
-  ${isSub ? '' : '<div class="section-header"><div><h1>Diario Mental</h1><p class="page-sub">Registro emocional y pre-market diario</p></div></div>'}
+  <div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
+    <div><h1>Diario Mental</h1><p class="page-sub">Registro emocional y pre-market diario</p></div>
+  </div>
 
   <div class="grid-2" style="margin-bottom:16px">
     <!-- Pre-market -->
@@ -1430,9 +1432,9 @@
     // ── APUNTES ──────────────────────────────────────────
     function renderApuntes(isSub = false) {
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
-      let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-        ${isSub ? '' : '<div><h1>Apuntes y Patrones</h1><p class="page-sub">Biblioteca de conocimientos</p></div>'}
-        <button class="btn btn-primary" onclick="openAddApunte()" style="margin-left:auto"><i class="ti ti-plus"></i> Nuevo Apunte</button>
+      let html = `<div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
+        <div><h1>Apuntes y Patrones</h1><p class="page-sub">Biblioteca de conocimientos</p></div>
+        <button class="btn btn-primary" onclick="openAddApunte()"><i class="ti ti-plus"></i> Nuevo Apunte</button>
       </div>`;
       if (S.apuntes.length) {
         html += '<div class="grid-2" style="margin-top:8px">';
