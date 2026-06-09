@@ -1502,11 +1502,11 @@
       const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'apunte-detail-modal';
       m.innerHTML = `<div class="modal">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
-          <div class="modal-title" style="margin-bottom:0">\${a.title}</div>
-          <button class="btn btn-danger btn-sm" onclick="closeModal('apunte-detail-modal');deleteApunte(\${id})"><i class="ti ti-trash"></i></button>
+          <div class="modal-title" style="margin-bottom:0">${a.title}</div>
+          <button class="btn btn-danger btn-sm" onclick="closeModal('apunte-detail-modal');deleteApunte(${id})"><i class="ti ti-trash"></i></button>
         </div>
-        \${a.image_url ? \`<img src="\${a.image_url}" style="width:100%;border-radius:var(--radius-lg);border:1px solid var(--border);margin-bottom:16px">\` : ''}
-        <div style="color:var(--text2);font-size:13px;line-height:1.6;white-space:pre-wrap">\${a.content || 'Sin contenido'}</div>
+        ${a.image_url ? `<img src="${a.image_url}" style="width:100%;border-radius:var(--radius-lg);border:1px solid var(--border);margin-bottom:16px">` : ''}
+        <div style="color:var(--text2);font-size:13px;line-height:1.6;white-space:pre-wrap">${a.content || 'Sin contenido'}</div>
         <div style="margin-top:20px;text-align:right"><button class="btn btn-ghost" onclick="closeModal('apunte-detail-modal')">Cerrar</button></div>
       </div>`;
       document.body.appendChild(m);
