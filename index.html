@@ -64,6 +64,8 @@
             class="ti ti-target"></i><span>Objetivos</span></button>
         <button class="nav-btn" onclick="showPage('config')" id="nav-config"><i
             class="ti ti-settings"></i><span>Config</span></button>
+        <button class="nav-btn" onclick="showPage('guia')" id="nav-guia"><i
+            class="ti ti-book"></i><span>Guía</span></button>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <div class="user-badge">
@@ -181,7 +183,7 @@
       if (S.trades.length === 0) {
         document.getElementById('main-content').innerHTML = '<div class="loading"><div class="spinner"></div> Cargando tus datos...</div>';
       }
-      
+
       const from90 = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
       const month = new Date().toISOString().slice(0, 7);
       const today = new Date().toISOString().split('T')[0];
@@ -213,22 +215,22 @@
         if (rCfg.status === 'fulfilled' && rCfg.value.data?.items?.length) S.checklist = rCfg.value.data.items;
         if (rPlans.status === 'fulfilled' && rPlans.value.data?.length) S.weeklyPlan = rPlans.value.data[0].plan;
         if (rHabits.status === 'fulfilled' && rHabits.value.data) S.habits = rHabits.value.data; else S.habits = [];
-        
+
         S.habitLogs = {};
         if (rLogs.status === 'fulfilled' && rLogs.value.data) {
           rLogs.value.data.forEach(l => { S.habitLogs[`${l.habit_id}_${l.log_date}`] = true; });
         }
-        
+
         if (rDiary.status === 'fulfilled' && rDiary.value.data) S.diaryEntries = rDiary.value.data; else S.diaryEntries = [];
         if (rGoal.status === 'fulfilled' && rGoal.value.data) S.monthlyGoal = rGoal.value.data; else S.monthlyGoal = null;
         if (rPremarket.status === 'fulfilled' && rPremarket.value.data) S.premarket = rPremarket.value.data; else S.premarket = {};
 
       } catch (e) {
         if (e.message === 'Timeout_Load') {
-           document.getElementById('main-content').innerHTML = '<div class="empty" style="margin-top:40px"><div class="empty-icon">🔌</div><div class="empty-title">Conexión interrumpida</div><div class="empty-sub">La red no responde o la sesión caducó.</div><div style="display:flex;gap:12px;justify-content:center;margin-top:16px"><button class="btn btn-primary" onclick="window.location.reload()"><i class="ti ti-refresh"></i> Recargar</button><button class="btn btn-ghost" onclick="handleLogout()"><i class="ti ti-logout"></i> Cerrar sesión</button></div></div>';
-           throw e;
+          document.getElementById('main-content').innerHTML = '<div class="empty" style="margin-top:40px"><div class="empty-icon">🔌</div><div class="empty-title">Conexión interrumpida</div><div class="empty-sub">La red no responde o la sesión caducó.</div><div style="display:flex;gap:12px;justify-content:center;margin-top:16px"><button class="btn btn-primary" onclick="window.location.reload()"><i class="ti ti-refresh"></i> Recargar</button><button class="btn btn-ghost" onclick="handleLogout()"><i class="ti ti-logout"></i> Cerrar sesión</button></div></div>';
+          throw e;
         }
-        console.error(e); S.trades = []; 
+        console.error(e); S.trades = [];
       }
     }
 
@@ -255,6 +257,30 @@
         return data;
       } catch (e) { console.error(e); showToast('Error: ' + e.message, 'warn'); return null; }
     }
+
+    async function updateTradeDb(id, t) {
+      const row = { pair: t.pair, direction: t.direction, result: t.result, rr: t.result, setup: t.setup, session: t.session, timeframe: t.timeframe, emotion: t.emotion, confidence: t.confidence, stress: t.stress, notes: t.notes || '', checklist: t.checklist || {}, duration_minutes: t.duration_minutes || null };
+      if (t.screenshot_url !== undefined) row.screenshot_url = t.screenshot_url;
+      try {
+        const { data, error } = await Promise.race([
+          sb.from('trades').update(row).eq('id', id).select().single(),
+          new Promise((_, r) => setTimeout(() => r(new Error('Tiempo de espera excedido')), 10000))
+        ]);
+        if (error) {
+          if (error.message && (error.message.includes('screenshot_url') || error.message.includes('duration_minutes'))) {
+            delete row.screenshot_url; delete row.duration_minutes;
+            const { data: d2, error: e2 } = await Promise.race([
+              sb.from('trades').update(row).eq('id', id).select().single(),
+              new Promise((_, r) => setTimeout(() => r(new Error('Tiempo de espera excedido')), 10000))
+            ]);
+            if (e2) throw e2; return d2;
+          }
+          throw error;
+        }
+        return data;
+      } catch (e) { console.error(e); showToast('Error: ' + e.message, 'warn'); return null; }
+    }
+
     async function updateTradeAI(id, score, errors, feedback) { try { await sb.from('trades').update({ score, errors, feedback }).eq('id', id).eq('user_id', S.user.id); } catch (e) { } }
     async function deleteTrade(id) { await sb.from('trades').delete().eq('id', id).eq('user_id', S.user.id); }
     async function saveChecklistCfg() { try { await sb.from('checklist_config').upsert({ user_id: S.user.id, items: S.checklist }, { onConflict: 'user_id' }); } catch (e) { } }
@@ -407,9 +433,59 @@
       if (S.equityChart) { S.equityChart.destroy(); S.equityChart = null; }
       if (S.setupChart) { S.setupChart.destroy(); S.setupChart = null; }
       if (S.periodChart) { S.periodChart.destroy(); S.periodChart = null; }
-      const pages = { dashboard: renderDashboard, trades: renderTrades, analisis: renderAnalisis, plan: renderPlan, habitos: renderHabitos, diario: renderDiario, objetivos: renderObjetivos, config: renderConfig };
+      const pages = { dashboard: renderDashboard, trades: renderTrades, analisis: renderAnalisis, plan: renderPlan, habitos: renderHabitos, diario: renderDiario, objetivos: renderObjetivos, config: renderConfig, guia: renderGuia };
       document.getElementById('main-content').innerHTML = '';
       if (pages[page]) pages[page]();
+    }
+
+    // ── GUIA ─────────────────────────────────────────────
+    function renderGuia() {
+      document.getElementById('main-content').innerHTML = `
+        <div class="section-header">
+          <div><h1>Guía de MarketMind</h1><p class="page-sub">Cómo funciona la plataforma y la IA</p></div>
+        </div>
+        
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><span class="card-title">¿Cómo piensa la IA de MarketMind?</span></div>
+            <p style="color:var(--text3);font-size:13px;line-height:1.6;margin-bottom:10px">
+              La IA analiza cada trade que registras basándose en múltiples factores para darte un <strong>Score (0-100)</strong> y detectar errores comunes:
+            </p>
+            <ul style="color:var(--text);font-size:13px;line-height:1.6;padding-left:16px;margin-bottom:14px">
+              <li><strong>Checklist:</strong> Cumplir tu checklist es fundamental. La IA penaliza duramente los trades impulsivos donde ignoras tus propias reglas.</li>
+              <li><strong>Gestión emocional:</strong> Un nivel de estrés muy alto (≥8) o una emoción baja (≤4) suele indicar FOMO o Revenge Trading, bajando tu nota incluso si ganaste.</li>
+              <li><strong>Resultado:</strong> Ganar siempre suma puntos, pero un trade perdedor que siguió el plan a la perfección obtendrá mejor nota que un trade ganador impulsivo y sin reglas.</li>
+            </ul>
+            <div class="insight-card warn">El objetivo de la IA no es juzgarte, sino enseñarte a ser disciplinado.</div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Métricas y Termómetro</span></div>
+            <p style="color:var(--text3);font-size:13px;line-height:1.6;margin-bottom:10px">
+              El <strong>Termómetro de forma</strong> evalúa tu estado actual (1-10) observando tu Win Rate reciente, tu racha de disciplina, y si estás cumpliendo tus hábitos diarios.
+            </p>
+            <p style="color:var(--text3);font-size:13px;line-height:1.6;margin-bottom:10px">
+              <strong>Drawdown máximo:</strong> Mide la racha de pérdidas más grande que has tenido desde tu pico más alto de beneficios. Mantenerlo bajo es vital.
+            </p>
+            <p style="color:var(--text3);font-size:13px;line-height:1.6">
+              <strong>Disciplina:</strong> Tu racha se incrementa por cada día que cumples al menos el 80% de la checklist en tus operaciones.
+            </p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+           <div class="card-header"><span class="card-title">Objetivos y Hábitos</span></div>
+           <p style="color:var(--text3);font-size:13px;line-height:1.6">
+             MarketMind no es solo un registro numérico, es un diario de alto rendimiento. En la pestaña <strong>Objetivos</strong> puedes definir tu meta mensual, y en <strong>Hábitos</strong> puedes trackear las rutinas que construyen a un buen trader (meditar, backtesting, ejercicio). El trading es 80% psicología; cuida tu mente y tus números mejorarán solos.
+           </p>
+        </div>
+
+        <div style="margin-top:50px;margin-bottom:20px;text-align:center;padding:30px;background:linear-gradient(to right, transparent, rgba(167,139,250,0.06), transparent);border-radius:12px;border-top:1px solid rgba(167,139,250,0.1);border-bottom:1px solid rgba(167,139,250,0.1)">
+          <div style="font-family:'Geist Mono', monospace; font-size: 28px; font-weight: 800; color: var(--lila); letter-spacing: 6px; text-transform: uppercase; text-shadow: 0 0 25px rgba(167,139,250,0.6);">
+            Desarrollado by ZAFIRO
+          </div>
+        </div>
+      `;
     }
 
     // ── DASHBOARD ────────────────────────────────────────
@@ -479,7 +555,7 @@
     function renderTrades() {
       document.getElementById('main-content').innerHTML = `
   <div class="section-header">
-    <div><h1>Trades</h1><p class="page-sub">${S.trades.length} registros</p></div>
+    <div><h1>Trades</h1><p class="page-sub">\${S.trades.length} registros</p></div>
     <button class="btn btn-primary" onclick="openAddTrade()"><i class="ti ti-plus"></i> Nuevo Trade</button>
   </div>
   ${renderTradeList([...S.trades].reverse(), true)}`;
@@ -507,50 +583,53 @@
 
     // ── ADD TRADE ────────────────────────────────────────
     let tradeCheckState = {}, selectedEmotion = 7, selectedImageFile = null;
-    function openAddTrade() {
-      tradeCheckState = {}; selectedEmotion = 7; selectedImageFile = null;
-      S.checklist.filter(c => c.active).forEach(c => { tradeCheckState[c.id] = false });
-      const checks = S.checklist.filter(c => c.active).map(c => `<div class="check-item"><div class="check-box" id="cb-${c.id}" onclick="toggleCheck(${c.id})"></div><span class="check-label">${c.label}</span></div>`).join('');
+    function openAddTrade(editId = null) {
+      let t = null;
+      if (editId) t = S.trades.find(x => x.id === editId);
+
+      tradeCheckState = {}; selectedEmotion = t ? t.emotion : 7; selectedImageFile = null;
+      S.checklist.filter(c => c.active).forEach(c => { tradeCheckState[c.id] = t && t.checklist ? !!t.checklist[c.id] : false; });
+      const checks = S.checklist.filter(c => c.active).map(c => `<div class="check-item"><div class="check-box \${tradeCheckState[c.id] ? 'checked' : ''}" id="cb-\${c.id}" onclick="toggleCheck(\${c.id})">\${tradeCheckState[c.id] ? '<i class="ti ti-check" style="font-size:11px;color:#fff"></i>' : ''}</div><span class="check-label">\${c.label}</span></div>`).join('');
       const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'add-modal';
       m.innerHTML = `<div class="modal">
-    <div class="modal-title"><i class="ti ti-plus" style="color:var(--lila)"></i> Registrar Trade</div>
+    <div class="modal-title"><i class="ti ti-\${editId ? 'edit' : 'plus'}" style="color:var(--lila)"></i> \${editId ? 'Editar' : 'Registrar'} Trade</div>
     <div class="grid-2">
-      <div class="form-group"><label class="form-label">Par</label><select class="form-input" id="t-pair">${PAIRS.map(p => `<option>${p}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Dirección</label><select class="form-input" id="t-dir"><option>Compra</option><option>Venta</option></select></div>
+      <div class="form-group"><label class="form-label">Par</label><select class="form-input" id="t-pair">\${PAIRS.map(p => \`<option \${t && t.pair === p ? 'selected' : ''}>\${p}</option>\`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Dirección</label><select class="form-input" id="t-dir"><option \${t && t.direction === 'Compra' ? 'selected' : ''}>Compra</option><option \${t && t.direction === 'Venta' ? 'selected' : ''}>Venta</option></select></div>
     </div>
     <div class="grid-2">
-      <div class="form-group"><label class="form-label">Resultado (R)</label><input type="number" step="0.1" class="form-input" id="t-result" placeholder="ej: 2.5 o -1"></div>
-      <div class="form-group"><label class="form-label">Duración (minutos)</label><input type="number" class="form-input" id="t-duration" placeholder="ej: 45"></div>
+      <div class="form-group"><label class="form-label">Resultado (R)</label><input type="number" step="0.1" class="form-input" id="t-result" placeholder="ej: 2.5 o -1" value="\${t ? t.result : ''}"></div>
+      <div class="form-group"><label class="form-label">Duración (minutos)</label><input type="number" class="form-input" id="t-duration" placeholder="ej: 45" value="\${t && t.duration_minutes ? t.duration_minutes : ''}"></div>
     </div>
     <div class="grid-2">
-      <div class="form-group"><label class="form-label">Sesión</label><select class="form-input" id="t-session">${SESSIONS.map(s => `<option>${s}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Timeframe</label><select class="form-input" id="t-tf">${TIMEFRAMES.map(f => `<option>${f}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Sesión</label><select class="form-input" id="t-session">\${SESSIONS.map(s => \`<option \${t && t.session === s ? 'selected' : ''}>\${s}</option>\`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Timeframe</label><select class="form-input" id="t-tf">\${TIMEFRAMES.map(f => \`<option \${t && t.timeframe === f ? 'selected' : ''}>\${f}</option>\`).join('')}</select></div>
     </div>
-    <div class="form-group"><label class="form-label">Setup</label><select class="form-input" id="t-setup">${SETUPS.map(s => `<option>${s}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Setup</label><select class="form-input" id="t-setup">\${SETUPS.map(s => \`<option \${t && t.setup === s ? 'selected' : ''}>\${s}</option>\`).join('')}</select></div>
     <div class="form-group">
       <label class="form-label">Estado emocional · 1 = muy malo · 10 = excelente</label>
-      <div class="emotion-track">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `<button class="emotion-btn ${i === 7 ? 'selected' : ''}" data-v="${i}" onclick="selectEmotion(${i})">${i}</button>`).join('')}</div>
+      <div class="emotion-track">\${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => \`<button class="emotion-btn \${i === selectedEmotion ? 'selected' : ''}" data-v="\${i}" onclick="selectEmotion(\${i})">\${i}</button>\`).join('')}</div>
     </div>
     <div class="grid-2">
-      <div class="form-group"><label class="form-label">Confianza</label><select class="form-input" id="t-conf">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `<option ${i === 7 ? 'selected' : ''}>${i}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Estrés</label><select class="form-input" id="t-stress">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `<option ${i === 3 ? 'selected' : ''}>${i}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Confianza</label><select class="form-input" id="t-conf">\${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => \`<option \${t && t.confidence === i || (!t && i === 7) ? 'selected' : ''}>\${i}</option>\`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Estrés</label><select class="form-input" id="t-stress">\${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => \`<option \${t && t.stress === i || (!t && i === 3) ? 'selected' : ''}>\${i}</option>\`).join('')}</select></div>
     </div>
-    <div class="form-group"><label class="form-label">Nota</label><textarea class="form-input" id="t-notes" placeholder="¿Qué viste? ¿Por qué entraste?"></textarea></div>
+    <div class="form-group"><label class="form-label">Nota</label><textarea class="form-input" id="t-notes" placeholder="¿Qué viste? ¿Por qué entraste?">\${t ? (t.notes || '') : ''}</textarea></div>
     <div class="form-group">
       <label class="form-label">Screenshot (opcional)</label>
-      <div id="img-preview" style="display:none;margin-bottom:8px;position:relative">
-        <img id="img-prev-el" style="width:100%;max-height:140px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border)">
+      <div id="img-preview" style="display:\${t && t.screenshot_url ? 'block' : 'none'};margin-bottom:8px;position:relative">
+        <img id="img-prev-el" src="\${t && t.screenshot_url ? t.screenshot_url : ''}" style="width:100%;max-height:140px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border)">
         <button onclick="removeImage()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.75);border:none;color:#fff;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
       </div>
-      <label class="upload-zone" id="upload-label"><i class="ti ti-photo"></i> Subir imagen del trade<input type="file" accept="image/*" id="t-screenshot" style="display:none" onchange="previewImage(this)"></label>
+      <label class="upload-zone" id="upload-label" style="display:\${t && t.screenshot_url ? 'none' : 'flex'}"><i class="ti ti-photo"></i> Subir imagen del trade<input type="file" accept="image/*" id="t-screenshot" style="display:none" onchange="previewImage(this)"></label>
     </div>
     <div class="form-group">
       <label class="form-label" style="margin-bottom:8px">Checklist</label>
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px">${checks || '<p style="color:var(--text3);font-size:12px">Sin checklist</p>'}</div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px">\${checks || '<p style="color:var(--text3);font-size:12px">Sin checklist</p>'}</div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-ghost" onclick="closeModal('add-modal')">Cancelar</button>
-      <button class="btn btn-primary" id="save-btn" onclick="submitTrade()"><i class="ti ti-check"></i> Guardar y analizar</button>
+      <button class="btn btn-primary" id="save-btn" onclick="submitTrade(\${editId || 'null'})"><i class="ti ti-check"></i> \${editId ? 'Actualizar y analizar' : 'Guardar y analizar'}</button>
     </div>
   </div>`;
       document.body.appendChild(m);
@@ -569,21 +648,42 @@
       const box = document.getElementById('cb-' + id);
       if (box) { box.classList.toggle('checked', tradeCheckState[id]); box.innerHTML = tradeCheckState[id] ? '<i class="ti ti-check" style="font-size:11px;color:#fff"></i>' : ''; }
     }
-    async function submitTrade() {
+    async function submitTrade(editId = null) {
       const result = parseFloat(document.getElementById('t-result')?.value);
       if (isNaN(result)) { showToast('Introduce el resultado del trade', 'warn'); return; }
       const btn = document.getElementById('save-btn'); btn.innerHTML = '<div class="spinner"></div> Guardando...'; btn.disabled = true;
       let screenshot_url = null;
+      let existingTrade = null;
+      if (editId) {
+        existingTrade = S.trades.find(x => x.id === editId);
+        screenshot_url = existingTrade?.screenshot_url;
+      }
+      if (document.getElementById('img-preview').style.display === 'none') {
+        screenshot_url = null;
+      }
       if (selectedImageFile) { showToast('Subiendo imagen...'); screenshot_url = await uploadScreenshot(selectedImageFile); }
       const trade = { direction: document.getElementById('t-dir').value, pair: document.getElementById('t-pair').value, result, setup: document.getElementById('t-setup').value, session: document.getElementById('t-session').value, timeframe: document.getElementById('t-tf').value, emotion: selectedEmotion, confidence: parseInt(document.getElementById('t-conf').value) || 7, stress: parseInt(document.getElementById('t-stress').value) || 3, notes: document.getElementById('t-notes').value || '', checklist: { ...tradeCheckState }, screenshot_url, duration_minutes: parseInt(document.getElementById('t-duration').value) || null };
-      const saved = await saveTrade(trade);
-      if (!saved) { btn.innerHTML = '<i class="ti ti-check"></i> Guardar y analizar'; btn.disabled = false; return; }
-      trade.id = saved.id; trade.created_at = saved.created_at; trade.screenshot_url = saved.screenshot_url || screenshot_url;
-      S.trades.push(trade);
+
+      if (editId) {
+        trade.id = editId;
+        const saved = await updateTradeDb(trade.id, trade);
+        if (!saved) { btn.innerHTML = '<i class="ti ti-check"></i> Actualizar y analizar'; btn.disabled = false; return; }
+        trade.created_at = existingTrade.created_at;
+        trade.screenshot_url = saved.screenshot_url !== undefined ? saved.screenshot_url : screenshot_url;
+        const idx = S.trades.findIndex(x => x.id === editId);
+        if (idx !== -1) S.trades[idx] = { ...S.trades[idx], ...trade };
+      } else {
+        const saved = await saveTrade(trade);
+        if (!saved) { btn.innerHTML = '<i class="ti ti-check"></i> Guardar y analizar'; btn.disabled = false; return; }
+        trade.id = saved.id; trade.created_at = saved.created_at; trade.screenshot_url = saved.screenshot_url !== undefined ? saved.screenshot_url : screenshot_url;
+        S.trades.push(trade);
+      }
+
       closeModal('add-modal');
-      showToast('Trade guardado. Analizando con IA...');
+      showToast(editId ? 'Trade actualizado. Re-analizando...' : 'Trade guardado. Analizando con IA...');
       await analyzeTradeWithAI(trade);
       checkRiskAlerts();
+      if (document.getElementById('detail-modal')) closeModal('detail-modal');
       showPage(S.currentPage);
     }
 
@@ -631,7 +731,10 @@
         ${trade.pair} · <span class="${trade.result >= 0 ? 'pos' : 'neg'}">${trade.result >= 0 ? '+' : ''}${trade.result}R</span>
         ${trade.duration_minutes ? `<span style="font-size:12px;color:var(--text3);font-weight:400">· ${trade.duration_minutes}min</span>` : ''}
       </div>
-      <button class="btn btn-danger btn-sm" onclick="closeModal('detail-modal');doDeleteTrade(${id})"><i class="ti ti-trash"></i> Eliminar</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('detail-modal');openAddTrade(\${id})"><i class="ti ti-edit"></i> Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="closeModal('detail-modal');doDeleteTrade(\${id})"><i class="ti ti-trash"></i> Eliminar</button>
+      </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
       <span class="tag tag-gray">${trade.session}</span><span class="tag tag-gray">${trade.timeframe}</span><span class="tag tag-gray">${trade.setup}</span>
@@ -1288,7 +1391,7 @@
         <button onclick="closeModal('lightbox-modal')" style="position:absolute; top:-40px; right:0; background:none; border:none; color:#fff; font-size:30px; cursor:pointer;">&times;</button>
         <img src="${url}" style="max-width:100%; max-height:90vh; object-fit:contain; border-radius:8px;">
       </div>`;
-      m.onclick = function(e) { if(e.target === m) closeModal('lightbox-modal'); };
+      m.onclick = function (e) { if (e.target === m) closeModal('lightbox-modal'); };
       document.body.appendChild(m);
     }
     function showToast(msg, type = 'info') {
