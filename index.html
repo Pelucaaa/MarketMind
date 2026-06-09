@@ -54,8 +54,8 @@
             class="ti ti-list"></i><span>Trades</span></button>
         <button class="nav-btn" onclick="showPage('analisis')" id="nav-analisis"><i
             class="ti ti-brain"></i><span>Análisis IA</span></button>
-        <button class="nav-btn" onclick="showPage('psicologia')" id="nav-psicologia"><i
-            class="ti ti-heart-rate-monitor"></i><span>Psicología</span></button>
+        <button class="nav-btn" onclick="showPage('objetivos')" id="nav-objetivos"><i
+            class="ti ti-target"></i><span>Objetivos</span></button>
         <button class="nav-btn" onclick="showPage('cuaderno')" id="nav-cuaderno"><i
             class="ti ti-notebook"></i><span>Cuaderno</span></button>
         <button class="nav-btn" onclick="showPage('config')" id="nav-config"><i
@@ -432,7 +432,7 @@
       if (S.equityChart) { S.equityChart.destroy(); S.equityChart = null; }
       if (S.setupChart) { S.setupChart.destroy(); S.setupChart = null; }
       if (S.periodChart) { S.periodChart.destroy(); S.periodChart = null; }
-      const pages = { dashboard: renderDashboard, trades: renderTrades, analisis: renderAnalisis, psicologia: renderPsicologia, cuaderno: renderCuaderno, config: renderConfig, guia: renderGuia };
+      const pages = { dashboard: renderDashboard, trades: renderTrades, analisis: renderAnalisis, objetivos: renderPsicologia, cuaderno: renderCuaderno, config: renderConfig, guia: renderGuia };
       document.getElementById('main-content').innerHTML = '';
       if (pages[page]) pages[page]();
     }
@@ -473,9 +473,16 @@
         </div>
 
         <div class="card" style="margin-top:14px">
-           <div class="card-header"><span class="card-title">Objetivos y Hábitos</span></div>
+           <div class="card-header"><span class="card-title">Objetivos, Hábitos y Diario</span></div>
            <p style="color:var(--text3);font-size:13px;line-height:1.6">
-             MarketMind no es solo un registro numérico, es un diario de alto rendimiento. En la pestaña <strong>Objetivos</strong> puedes definir tu meta mensual, y en <strong>Hábitos</strong> puedes trackear las rutinas que construyen a un buen trader (meditar, backtesting, ejercicio). El trading es 80% psicología; cuida tu mente y tus números mejorarán solos.
+             MarketMind no es solo un registro numérico, es un diario de alto rendimiento. En la pestaña <strong>Objetivos</strong> puedes definir tu meta mensual en R, controlar tus <strong>Hábitos</strong> diarios (meditar, backtesting, ejercicio…) y llevar un <strong>Diario Personal</strong> con pre-market y notas emocionales. El trading es 80% psicología; cuida tu mente y tus números mejorarán solos.
+           </p>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+           <div class="card-header"><span class="card-title">Cuaderno y Apuntes</span></div>
+           <p style="color:var(--text3);font-size:13px;line-height:1.6">
+             En la sección <strong>Cuaderno</strong> encontrarás tu <strong>Plan Semanal</strong> (generado con IA a partir de tus trades recientes) y los <strong>Apuntes de Patrones</strong>, tu biblioteca personal para guardar capturas de gráficos, estructuras de mercado y notas que vayas descubriendo en tu operativa diaria.
            </p>
         </div>
 
@@ -877,9 +884,9 @@
     function renderPlan(isSub = false) {
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
       container.innerHTML = `
-  <div class="${isSub ? '' : 'section-header'}">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
     ${isSub ? '' : '<div><h1>Plan Semanal</h1><p class="page-sub">Reglas claras, ejecución perfecta</p></div>'}
-    <button class="btn btn-primary" onclick="generateWeeklyPlan()"><i class="ti ti-wand"></i> Generar Plan</button>
+    <button class="btn btn-primary" onclick="generateWeeklyPlan()" style="margin-left:auto"><i class="ti ti-wand"></i> Generar Plan</button>
   </div>
   <!-- Recap automático -->
   ${renderWeeklyRecap(getLastWeekTrades())}
@@ -1371,20 +1378,20 @@
       if (isNaN(r) || r <= 0) { showToast('Introduce un objetivo válido', 'warn'); return; }
       const month = new Date().toISOString().slice(0, 7);
       await saveMonthlyGoal({ month, target_r: r, notes: document.getElementById('goal-notes').value });
-      closeModal('goal-modal'); showPage('objetivos'); showToast('Objetivo guardado', 'success');
+      closeModal('goal-modal'); S.psicoTab = 'objetivos'; showPage('objetivos'); showToast('Objetivo guardado', 'success');
     }
 
-    // ── PSICOLOGÍA Y RUTINA (Agrupador) ──────────────────
+    // ── OBJETIVOS (Agrupador: Objetivos + Hábitos + Diario) ──
     function switchPsicoTab(tab) { S.psicoTab = tab; renderPsicologia(); }
     function renderPsicologia() {
       document.getElementById('main-content').innerHTML = `
         <div class="section-header" style="margin-bottom:12px">
-          <div><h1>Psicología y Rutina</h1><p class="page-sub">Objetivos, Hábitos y Diario Mental</p></div>
+          <div><h1>Objetivos</h1><p class="page-sub">Metas, Hábitos y Diario Personal</p></div>
         </div>
         <div class="tabs-container">
-          <button class="tab-btn \${S.psicoTab === 'objetivos' ? 'active' : ''}" onclick="switchPsicoTab('objetivos')">🎯 Objetivos</button>
-          <button class="tab-btn \${S.psicoTab === 'habitos' ? 'active' : ''}" onclick="switchPsicoTab('habitos')">✓ Hábitos</button>
-          <button class="tab-btn \${S.psicoTab === 'diario' ? 'active' : ''}" onclick="switchPsicoTab('diario')">🧠 Diario Mental</button>
+          <button class="tab-btn ${S.psicoTab === 'objetivos' ? 'active' : ''}" onclick="switchPsicoTab('objetivos')">🎯 Objetivos</button>
+          <button class="tab-btn ${S.psicoTab === 'habitos' ? 'active' : ''}" onclick="switchPsicoTab('habitos')">✓ Hábitos</button>
+          <button class="tab-btn ${S.psicoTab === 'diario' ? 'active' : ''}" onclick="switchPsicoTab('diario')">📓 Diario Personal</button>
         </div>
         <div id="sub-content"></div>
       `;
@@ -1401,8 +1408,8 @@
           <div><h1>Cuaderno de Trading</h1><p class="page-sub">Plan Semanal y Apuntes de Patrones</p></div>
         </div>
         <div class="tabs-container">
-          <button class="tab-btn \${S.cuadernoTab === 'plan' ? 'active' : ''}" onclick="switchCuadernoTab('plan')">📅 Plan Semanal</button>
-          <button class="tab-btn \${S.cuadernoTab === 'apuntes' ? 'active' : ''}" onclick="switchCuadernoTab('apuntes')">📚 Apuntes y Patrones</button>
+          <button class="tab-btn ${S.cuadernoTab === 'plan' ? 'active' : ''}" onclick="switchCuadernoTab('plan')">📅 Plan Semanal</button>
+          <button class="tab-btn ${S.cuadernoTab === 'apuntes' ? 'active' : ''}" onclick="switchCuadernoTab('apuntes')">📚 Apuntes y Patrones</button>
         </div>
         <div id="sub-content"></div>
       `;
@@ -1413,21 +1420,29 @@
     // ── APUNTES ──────────────────────────────────────────
     function renderApuntes(isSub = false) {
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
-      container.innerHTML = `
-        <div class="\${isSub ? '' : 'section-header'}">
-          \${isSub ? '' : '<div><h1>Apuntes y Patrones</h1><p class="page-sub">Biblioteca de conocimientos</p></div>'}
-          <button class="btn btn-primary" onclick="openAddApunte()"><i class="ti ti-plus"></i> Nuevo Apunte</button>
-        </div>
-        \${S.apuntes.length ? \`<div class="grid-2" style="margin-top:16px">\${S.apuntes.map(a => \`
-          <div class="card" style="padding:0;overflow:hidden;cursor:pointer;transition:all 0.2s" onclick="openApunteDetail(\${a.id})">
-            \${a.image_url ? \`<img src="\${a.image_url}" style="width:100%;height:140px;object-fit:cover;border-bottom:1px solid var(--border)">\` : '<div style="height:40px;background:var(--bg3);border-bottom:1px solid var(--border)"></div>'}
-            <div style="padding:14px">
-              <div style="font-weight:600;font-size:14px;margin-bottom:6px">\${a.title}</div>
-              <div style="font-size:12px;color:var(--text3);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">\${a.content || 'Sin descripción'}</div>
-            </div>
-          </div>
-        \`).join('')}</div>\` : '<div class="empty"><div class="empty-icon">📚</div><div class="empty-title">Sin apuntes</div><div class="empty-sub">Crea tu primer apunte de patrones</div></div>'}
-      `;
+      let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        ${isSub ? '' : '<div><h1>Apuntes y Patrones</h1><p class="page-sub">Biblioteca de conocimientos</p></div>'}
+        <button class="btn btn-primary" onclick="openAddApunte()" style="margin-left:auto"><i class="ti ti-plus"></i> Nuevo Apunte</button>
+      </div>`;
+      if (S.apuntes.length) {
+        html += '<div class="grid-2" style="margin-top:8px">';
+        S.apuntes.forEach(function(a) {
+          html += '<div class="card" style="padding:0;overflow:hidden;cursor:pointer;transition:all 0.2s" onclick="openApunteDetail(' + a.id + ')">';
+          if (a.image_url) {
+            html += '<img src="' + a.image_url + '" style="width:100%;height:140px;object-fit:cover;border-bottom:1px solid var(--border)">';
+          } else {
+            html += '<div style="height:40px;background:linear-gradient(135deg,var(--bg3),var(--bg4));border-bottom:1px solid var(--border)"></div>';
+          }
+          html += '<div style="padding:14px">';
+          html += '<div style="font-weight:600;font-size:14px;margin-bottom:6px">' + (a.title || '') + '</div>';
+          html += '<div style="font-size:12px;color:var(--text3);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + (a.content || 'Sin descripción') + '</div>';
+          html += '</div></div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div class="empty" style="margin-top:20px"><div class="empty-icon">📚</div><div class="empty-title">Sin apuntes todavía</div><div class="empty-sub">Crea tu primer apunte de patrones para tu biblioteca personal</div></div>';
+      }
+      container.innerHTML = html;
     }
 
     let selectedApunteImg = null;
