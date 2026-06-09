@@ -48,18 +48,20 @@
         <span class="logo-sub">JOURNAL</span>
       </div>
       <div class="nav">
-        <button class="nav-btn active" onclick="showPage('dashboard')" id="nav-dashboard"><i
+        <button class="nav-btn" onclick="showPage('dashboard')" id="nav-dashboard"><i
             class="ti ti-layout-dashboard"></i><span>Inicio</span></button>
         <button class="nav-btn" onclick="showPage('trades')" id="nav-trades"><i
             class="ti ti-list"></i><span>Trades</span></button>
         <button class="nav-btn" onclick="showPage('analisis')" id="nav-analisis"><i
             class="ti ti-brain"></i><span>Análisis IA</span></button>
-        <button class="nav-btn" onclick="showPage('objetivos')" id="nav-objetivos"><i
-            class="ti ti-target"></i><span>Objetivos</span></button>
-        <button class="nav-btn" onclick="S.psicoTab='habitos';showPage('objetivos')" id="nav-habitos"><i
-            class="ti ti-check"></i><span>Hábitos</span></button>
         <button class="nav-btn" onclick="showPage('cuaderno')" id="nav-cuaderno"><i
             class="ti ti-notebook"></i><span>Cuaderno</span></button>
+        <button class="nav-btn" onclick="showPage('objetivos')" id="nav-objetivos"><i
+            class="ti ti-target"></i><span>Objetivos</span></button>
+        <button class="nav-btn" onclick="showPage('habitos')" id="nav-habitos"><i
+            class="ti ti-leaf"></i><span>Hábitos</span></button>
+        <button class="nav-btn" onclick="showPage('diario')" id="nav-diario"><i
+            class="ti ti-mood-smile"></i><span>Diario Mental</span></button>
         <button class="nav-btn" onclick="showPage('config')" id="nav-config"><i
             class="ti ti-settings"></i><span>Config</span></button>
         <button class="nav-btn" onclick="showPage('guia')" id="nav-guia"><i
@@ -444,7 +446,7 @@
       if (S.equityChart) { S.equityChart.destroy(); S.equityChart = null; }
       if (S.setupChart) { S.setupChart.destroy(); S.setupChart = null; }
       if (S.periodChart) { S.periodChart.destroy(); S.periodChart = null; }
-      const pages = { dashboard: renderDashboard, trades: renderTrades, analisis: renderAnalisis, objetivos: renderPsicologia, cuaderno: renderCuaderno, config: renderConfig, guia: renderGuia };
+      const pages = { dashboard: renderDashboard, trades: renderTrades, analisis: renderAnalisis, cuaderno: renderCuaderno, objetivos: renderObjetivos, habitos: renderHabitos, diario: renderDiario, config: renderConfig, guia: renderGuia };
       document.getElementById('main-content').innerHTML = '';
       if (pages[page]) pages[page]();
     }
@@ -870,14 +872,14 @@
     }
 
     // ── OBJETIVOS ──────────────────────────────────────────
-    function renderObjetivos(isSub = false) {
+    function renderObjetivos() {
       const g = S.monthlyGoal;
       const r = S.trades.filter(t => t.created_at?.startsWith(new Date().toISOString().slice(0, 7))).reduce((a, b) => a + b.result, 0);
       const pct = g ? Math.min(100, Math.max(0, (r / g.target_r) * 100)) : 0;
 
-      const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
+      const container = document.getElementById('main-content');
       container.innerHTML = `
-  <div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
+  <div class="section-header">
     <div><h1>Objetivos</h1><p class="page-sub">Foco mensual en R</p></div>
     <button class="btn btn-primary" onclick="openAddGoal()"><i class="ti ti-target"></i> ${g ? 'Editar Meta' : 'Definir Meta'}</button>
   </div>
@@ -1000,15 +1002,15 @@
       return Math.round(done / S.habits.length * 100);
     }
 
-    function renderHabitos(isSub = false) {
+    function renderHabitos() {
       const today = new Date().toISOString().split('T')[0];
       const completedToday = S.habits.filter(h => S.habitLogs[`${h.id}_${today}`]).length;
       const total = S.habits.length;
       const pct = total > 0 ? Math.round(completedToday / total * 100) : 0;
       
-      const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
+      const container = document.getElementById('main-content');
       container.innerHTML = `
-  <div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
+  <div class="section-header">
     <div><h1>Hábitos</h1><p class="page-sub">Seguimiento continuo de tus rutinas</p></div>
     <button class="btn btn-primary" onclick="openAddHabit()"><i class="ti ti-plus"></i> Nuevo Hábito</button>
   </div>
@@ -1053,7 +1055,7 @@
             <div onclick="toggleHabitLog(${h.id},'${d.date}')" title="${done ? 'Hecho — clic para desmarcar' : 'Marcar como hecho'}"
               style="width:${isToday ? '28px' : '20px'};height:${isToday ? '28px' : '20px'};border-radius:50%;cursor:pointer;border:${done ? 'none' : `1.5px ${isToday ? 'dashed' : 'solid'} ${isToday ? 'var(--lila)' : 'var(--border2)'}`};background:${done ? (isToday ? 'var(--lila)' : 'rgba(52,211,153,0.6)') : 'transparent'};display:flex;align-items:center;justify-content:center;transition:all 0.15s;box-shadow:${isToday && !done ? '0 0 0 3px var(--lila-dim)' : 'none'}"
               onmouseover="if(!${done})this.style.background='var(--lila-dim)'" onmouseout="if(!${done})this.style.background='transparent'">
-              ${done ? `<i class="ti ti-check" style="font-size:${isToday ? '12px' : '9px'};color:#fff"></i>` : ''}
+              ${done ? `<i class="ti ti-star" style="font-size:${isToday ? '12px' : '9px'};color:#fff"></i>` : ''}
             </div>
           </div>`;
         }).join('')}
@@ -1175,14 +1177,14 @@
     }
 
     // ── DIARIO ───────────────────────────────────────────
-    function renderDiario(isSub = false) {
+    function renderDiario() {
       const today = new Date().toISOString().split('T')[0];
       const todayEntry = S.diaryEntries.find(e => e.entry_date === today) || {};
       const hasPM = S.premarket?.entry_date === today;
       
-      const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
+      const container = document.getElementById('main-content');
       container.innerHTML = `
-  <div class="section-header" style="${isSub ? 'margin-top:16px;' : ''}">
+  <div class="section-header">
     <div><h1>Diario Mental</h1><p class="page-sub">Registro emocional y pre-market diario</p></div>
   </div>
 
@@ -1395,26 +1397,8 @@
       closeModal('goal-modal'); S.psicoTab = 'objetivos'; showPage('objetivos'); showToast('Objetivo guardado', 'success');
     }
 
-    // ── OBJETIVOS (Agrupador: Objetivos + Hábitos + Diario) ──
-    function switchPsicoTab(tab) { S.psicoTab = tab; renderPsicologia(); }
-    function renderPsicologia() {
-      document.getElementById('main-content').innerHTML = `
-        <div class="section-header" style="margin-bottom:12px">
-          <div><h1>Objetivos</h1><p class="page-sub">Metas, Hábitos y Diario Personal</p></div>
-        </div>
-        <div class="tabs-container">
-          <button class="tab-btn ${S.psicoTab === 'objetivos' ? 'active' : ''}" onclick="switchPsicoTab('objetivos')">🎯 Objetivos</button>
-          <button class="tab-btn ${S.psicoTab === 'habitos' ? 'active' : ''}" onclick="switchPsicoTab('habitos')">✓ Hábitos</button>
-          <button class="tab-btn ${S.psicoTab === 'diario' ? 'active' : ''}" onclick="switchPsicoTab('diario')">📓 Diario Personal</button>
-        </div>
-        <div id="sub-content"></div>
-      `;
-      if (S.psicoTab === 'objetivos') renderObjetivos(true);
-      if (S.psicoTab === 'habitos') renderHabitos(true);
-      if (S.psicoTab === 'diario') renderDiario(true);
-    }
-
-    // ── CUADERNO (Agrupador) ─────────────────────────────
+    // ── OBJETIVOS (Standalone) ──
+    
     function switchCuadernoTab(tab) { S.cuadernoTab = tab; renderCuaderno(); }
     function renderCuaderno() {
       document.getElementById('main-content').innerHTML = `
