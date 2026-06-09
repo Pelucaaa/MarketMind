@@ -145,10 +145,12 @@
     function showAuthError(msg) { const el = document.getElementById('auth-error'); el.textContent = msg; el.style.display = 'block'; }
     async function handleLogout() {
       try { await Promise.race([sb.auth.signOut(), new Promise(r => setTimeout(r, 1500))]); } catch (e) { }
+      const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.includes('supabase')) localStorage.removeItem(key);
+        if (key && key.includes('supabase')) keysToRemove.push(key);
       }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
       window.location.reload();
     }
     let isInitialAuthLoad = true;
@@ -188,7 +190,7 @@
         S.trades = (trades || []).map(t => ({ ...t, result: parseFloat(t.result), checklist: t.checklist || {}, errors: t.errors || [], feedback: t.feedback || null, screenshot_url: t.screenshot_url || null }));
       } catch (e) {
         if (e.message === 'Timeout_Load') {
-           document.getElementById('main-content').innerHTML = '<div class="empty" style="margin-top:40px"><div class="empty-icon">🔌</div><div class="empty-title">Conexión interrumpida</div><div class="empty-sub">La red no responde (probablemente por dejar la web en reposo).</div><button class="btn btn-primary" onclick="window.location.reload()" style="margin-top:16px"><i class="ti ti-refresh"></i> Recargar página</button></div>';
+           document.getElementById('main-content').innerHTML = '<div class="empty" style="margin-top:40px"><div class="empty-icon">🔌</div><div class="empty-title">Conexión interrumpida</div><div class="empty-sub">La red no responde o la sesión caducó.</div><div style="display:flex;gap:12px;justify-content:center;margin-top:16px"><button class="btn btn-primary" onclick="window.location.reload()"><i class="ti ti-refresh"></i> Recargar</button><button class="btn btn-ghost" onclick="handleLogout()"><i class="ti ti-logout"></i> Cerrar sesión</button></div></div>';
            throw e;
         }
         console.error(e); S.trades = []; 
