@@ -322,6 +322,13 @@
       const todayTrades = S.trades.filter(t => t.created_at?.slice(0, 10) === today);
       const todayPnl = todayTrades.reduce((a, b) => a + b.result, 0);
       const recent3 = S.trades.slice(-3);
+      
+      let habitPct = 100;
+      if (S.habits && S.habits.length > 0) {
+        const done = S.habits.filter(h => S.habitLogs[`${h.id}_${today}`]).length;
+        habitPct = Math.round(done / S.habits.length * 100);
+      }
+
       const banner = document.getElementById('risk-banner');
       const msg = document.getElementById('risk-banner-msg');
       if (todayPnl <= -2) {
@@ -329,6 +336,9 @@
         banner.style.display = 'flex';
       } else if (recent3.length === 3 && recent3.every(t => t.result < 0)) {
         msg.textContent = `⚠️ Llevas 3 pérdidas consecutivas. Tómate un descanso antes de continuar.`;
+        banner.style.display = 'flex';
+      } else if (habitPct < 25) {
+        msg.textContent = `⚠️ Hoy has completado menos del 25% de tus hábitos. La falta de rutina puede afectar a tu disciplina operativa.`;
         banner.style.display = 'flex';
       } else {
         banner.style.display = 'none';
@@ -990,14 +1000,14 @@
 
     function renderHabitos(isSub = false) {
       const today = new Date().toISOString().split('T')[0];
-      const completedToday = S.habits.filter(h => S.habitLogs[`\${h.id}_\${today}`]).length;
+      const completedToday = S.habits.filter(h => S.habitLogs[`${h.id}_${today}`]).length;
       const total = S.habits.length;
       const pct = total > 0 ? Math.round(completedToday / total * 100) : 0;
       
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
       container.innerHTML = `
-  <div class="\${isSub ? '' : 'section-header'}">
-    \${isSub ? '' : '<div><h1>Hábitos</h1><p class="page-sub">Seguimiento continuo de tus rutinas</p></div>'}
+  <div class="${isSub ? '' : 'section-header'}">
+    ${isSub ? '' : '<div><h1>Hábitos</h1><p class="page-sub">Seguimiento continuo de tus rutinas</p></div>'}
     <button class="btn btn-primary" onclick="openAddHabit()"><i class="ti ti-plus"></i> Nuevo Hábito</button>
   </div>
   ${total > 0 ? `<div class="card" style="margin-bottom:16px">
@@ -1170,7 +1180,7 @@
       
       const container = document.getElementById(isSub ? 'sub-content' : 'main-content');
       container.innerHTML = `
-  \${isSub ? '' : '<div class="section-header"><div><h1>Diario Mental</h1><p class="page-sub">Registro emocional y pre-market diario</p></div></div>'}
+  ${isSub ? '' : '<div class="section-header"><div><h1>Diario Mental</h1><p class="page-sub">Registro emocional y pre-market diario</p></div></div>'}
 
   <div class="grid-2" style="margin-bottom:16px">
     <!-- Pre-market -->
