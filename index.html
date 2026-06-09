@@ -181,13 +181,48 @@
       if (S.trades.length === 0) {
         document.getElementById('main-content').innerHTML = '<div class="loading"><div class="spinner"></div> Cargando tus datos...</div>';
       }
+      
+      const from90 = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+      const month = new Date().toISOString().slice(0, 7);
+      const today = new Date().toISOString().split('T')[0];
+
+      const pTrades = sb.from('trades').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true });
+      const pCfg = sb.from('checklist_config').select('items').eq('user_id', S.user.id).maybeSingle();
+      const pPlans = sb.from('weekly_plans').select('plan').eq('user_id', S.user.id).order('created_at', { ascending: false }).limit(1);
+      const pHabits = sb.from('habits').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true });
+      const pLogs = sb.from('habit_logs').select('*').eq('user_id', S.user.id).gte('log_date', from90);
+      const pDiary = sb.from('diary_entries').select('*').eq('user_id', S.user.id).gte('entry_date', from90).order('entry_date', { ascending: false });
+      const pGoal = sb.from('monthly_goals').select('*').eq('user_id', S.user.id).eq('month', month).maybeSingle();
+      const pPremarket = sb.from('premarket').select('*').eq('user_id', S.user.id).eq('entry_date', today).maybeSingle();
+
       try {
-        const { data: trades, error } = await Promise.race([
-          sb.from('trades').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true }),
-          new Promise((_, r) => setTimeout(() => r(new Error('Timeout_Load')), 8000))
+        const results = await Promise.race([
+          Promise.allSettled([pTrades, pCfg, pPlans, pHabits, pLogs, pDiary, pGoal, pPremarket]),
+          new Promise((_, r) => setTimeout(() => r(new Error('Timeout_Load')), 15000))
         ]);
-        if (error) throw error;
-        S.trades = (trades || []).map(t => ({ ...t, result: parseFloat(t.result), checklist: t.checklist || {}, errors: t.errors || [], feedback: t.feedback || null, screenshot_url: t.screenshot_url || null }));
+
+        const [rTrades, rCfg, rPlans, rHabits, rLogs, rDiary, rGoal, rPremarket] = results;
+
+        if (rTrades.status === 'fulfilled' && !rTrades.value.error) {
+          S.trades = (rTrades.value.data || []).map(t => ({ ...t, result: parseFloat(t.result), checklist: t.checklist || {}, errors: t.errors || [], feedback: t.feedback || null, screenshot_url: t.screenshot_url || null }));
+        } else {
+          S.trades = [];
+          if (rTrades.status === 'fulfilled' && rTrades.value.error) console.error(rTrades.value.error);
+        }
+
+        if (rCfg.status === 'fulfilled' && rCfg.value.data?.items?.length) S.checklist = rCfg.value.data.items;
+        if (rPlans.status === 'fulfilled' && rPlans.value.data?.length) S.weeklyPlan = rPlans.value.data[0].plan;
+        if (rHabits.status === 'fulfilled' && rHabits.value.data) S.habits = rHabits.value.data; else S.habits = [];
+        
+        S.habitLogs = {};
+        if (rLogs.status === 'fulfilled' && rLogs.value.data) {
+          rLogs.value.data.forEach(l => { S.habitLogs[`${l.habit_id}_${l.log_date}`] = true; });
+        }
+        
+        if (rDiary.status === 'fulfilled' && rDiary.value.data) S.diaryEntries = rDiary.value.data; else S.diaryEntries = [];
+        if (rGoal.status === 'fulfilled' && rGoal.value.data) S.monthlyGoal = rGoal.value.data; else S.monthlyGoal = null;
+        if (rPremarket.status === 'fulfilled' && rPremarket.value.data) S.premarket = rPremarket.value.data; else S.premarket = {};
+
       } catch (e) {
         if (e.message === 'Timeout_Load') {
            document.getElementById('main-content').innerHTML = '<div class="empty" style="margin-top:40px"><div class="empty-icon">🔌</div><div class="empty-title">Conexión interrumpida</div><div class="empty-sub">La red no responde o la sesión caducó.</div><div style="display:flex;gap:12px;justify-content:center;margin-top:16px"><button class="btn btn-primary" onclick="window.location.reload()"><i class="ti ti-refresh"></i> Recargar</button><button class="btn btn-ghost" onclick="handleLogout()"><i class="ti ti-logout"></i> Cerrar sesión</button></div></div>';
@@ -195,29 +230,6 @@
         }
         console.error(e); S.trades = []; 
       }
-      try { const { data: cfg } = await sb.from('checklist_config').select('items').eq('user_id', S.user.id).maybeSingle(); if (cfg?.items?.length) S.checklist = cfg.items; } catch (e) { }
-      try { const { data: plans } = await sb.from('weekly_plans').select('plan').eq('user_id', S.user.id).order('created_at', { ascending: false }).limit(1); if (plans?.length) S.weeklyPlan = plans[0].plan; } catch (e) { }
-      try { const { data: h } = await sb.from('habits').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true }); S.habits = h || []; } catch (e) { S.habits = []; }
-      try {
-        const from = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
-        const { data: logs } = await sb.from('habit_logs').select('*').eq('user_id', S.user.id).gte('log_date', from);
-        S.habitLogs = {}; (logs || []).forEach(l => { S.habitLogs[`${l.habit_id}_${l.log_date}`] = true; });
-      } catch (e) { S.habitLogs = {}; }
-      try {
-        const from = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
-        const { data: d } = await sb.from('diary_entries').select('*').eq('user_id', S.user.id).gte('entry_date', from).order('entry_date', { ascending: false });
-        S.diaryEntries = d || [];
-      } catch (e) { S.diaryEntries = []; }
-      try {
-        const month = new Date().toISOString().slice(0, 7);
-        const { data: g } = await sb.from('monthly_goals').select('*').eq('user_id', S.user.id).eq('month', month).maybeSingle();
-        S.monthlyGoal = g || null;
-      } catch (e) { S.monthlyGoal = null; }
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        const { data: pm } = await sb.from('premarket').select('*').eq('user_id', S.user.id).eq('entry_date', today).maybeSingle();
-        S.premarket = pm || {};
-      } catch (e) { S.premarket = {}; }
     }
 
     // ── SUPABASE HELPERS ─────────────────────────────────
@@ -232,7 +244,10 @@
         if (error) {
           if (error.message && (error.message.includes('screenshot_url') || error.message.includes('duration_minutes'))) {
             delete row.screenshot_url; delete row.duration_minutes;
-            const { data: d2, error: e2 } = await sb.from('trades').insert(row).select().single();
+            const { data: d2, error: e2 } = await Promise.race([
+              sb.from('trades').insert(row).select().single(),
+              new Promise((_, r) => setTimeout(() => r(new Error('Tiempo de espera excedido')), 10000))
+            ]);
             if (e2) throw e2; return d2;
           }
           throw error;
