@@ -111,6 +111,14 @@
       { id: 9, label: 'Riesgo controlado', active: true },
     ];
 
+    let S = {
+      user: null, trades: [], checklist: [...DEFAULT_CL], weeklyPlan: null,
+      apiKey: '', equityChart: null, currentPage: 'dashboard',
+      habits: [], habitLogs: {}, diaryEntries: [], monthlyGoal: null,
+      premarket: {}, setupChart: null, periodChart: null,
+      apuntes: [], psicoTab: 'objetivos', cuadernoTab: 'plan'
+    };
+
     document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState === 'visible') {
         try {
