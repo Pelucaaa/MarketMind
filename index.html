@@ -94,7 +94,7 @@
     const SUPABASE_URL = 'https://vkjirtcqyexoyrpiflgu.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_92rFDjEPcxw9CfMRMJWN6A_qNUdfAdJ';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: localStorage }
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storage: localStorage }
     });
 
     const PAIRS = ['XAUUSD', 'NAS100', 'EURUSD', 'GBPUSD', 'US30', 'SPX500', 'USDJPY', 'BTCUSD', 'ETHUSDT'];
@@ -111,13 +111,14 @@
       { id: 9, label: 'Riesgo controlado', active: true },
     ];
 
-    let S = {
-      user: null, trades: [], checklist: [...DEFAULT_CL], weeklyPlan: null,
-      apiKey: '', equityChart: null, currentPage: 'dashboard',
-      habits: [], habitLogs: {}, diaryEntries: [], monthlyGoal: null,
-      premarket: {}, setupChart: null, periodChart: null,
-      apuntes: [], psicoTab: 'objetivos', cuadernoTab: 'plan'
-    };
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          const { data: { session } } = await sb.auth.getSession();
+          if (!session) { window.location.reload(); }
+        } catch (e) { }
+      }
+    });
 
     // ── AUTH ─────────────────────────────────────────────
     let authMode = 'login';
