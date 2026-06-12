@@ -119,14 +119,7 @@
       apuntes: [], psicoTab: 'objetivos', cuadernoTab: 'plan'
     };
 
-    document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState === 'visible') {
-        try {
-          const { data: { session } } = await sb.auth.getSession();
-          if (!session) { window.location.reload(); }
-        } catch (e) { }
-      }
-    });
+
 
     // ── AUTH ─────────────────────────────────────────────
     let authMode = 'login';
@@ -156,7 +149,7 @@
       const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.includes('supabase')) keysToRemove.push(key);
+        if (key && (key.includes('supabase') || key.startsWith('sb-'))) keysToRemove.push(key);
       }
       keysToRemove.forEach(k => localStorage.removeItem(k));
       window.location.reload();
@@ -171,7 +164,7 @@
       }
       if (session?.user) {
         S.user = session.user; S.apiKey = localStorage.getItem('mm_key') || '';
-        if (isInitialAuthLoad || event === 'SIGNED_IN') {
+        if (isInitialAuthLoad) {
           isInitialAuthLoad = false;
           document.getElementById('auth-screen').style.display = 'none';
           document.getElementById('app').style.display = 'flex';
