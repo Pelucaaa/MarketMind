@@ -171,7 +171,7 @@
           document.getElementById('user-avatar').textContent = session.user.email[0].toUpperCase();
           document.getElementById('user-email-display').textContent = session.user.email.split('@')[0];
           await loadUserData();
-          showPage('dashboard');
+          showPage(S.currentPage || 'dashboard');
           checkRiskAlerts();
         }
       }
@@ -179,7 +179,17 @@
 
     // ── LOAD DATA ────────────────────────────────────────
     async function loadUserData() {
-      if (S.trades.length === 0) {
+      const cacheKey = 'mm_cache_' + S.user.id;
+      let hasCache = false;
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const c = JSON.parse(cached);
+          if (c) { Object.assign(S, c); hasCache = true; showPage(S.currentPage || 'dashboard'); }
+        }
+      } catch (e) {}
+
+      if (!hasCache && S.trades.length === 0) {
         document.getElementById('main-content').innerHTML = '<div class="loading"><div class="spinner"></div> Cargando tus datos...</div>';
       }
 
@@ -226,12 +236,26 @@
         if (rPremarket.status === 'fulfilled' && rPremarket.value.data) S.premarket = rPremarket.value.data; else S.premarket = {};
         if (rApuntes.status === 'fulfilled' && rApuntes.value.data) S.apuntes = rApuntes.value.data; else S.apuntes = [];
 
+        try {
+          const toCache = {
+            trades: S.trades, checklist: S.checklist, weeklyPlan: S.weeklyPlan,
+            habits: S.habits, habitLogs: S.habitLogs, diaryEntries: S.diaryEntries,
+            monthlyGoal: S.monthlyGoal, premarket: S.premarket, apuntes: S.apuntes,
+            currentPage: S.currentPage
+          };
+          localStorage.setItem(cacheKey, JSON.stringify(toCache));
+        } catch(e) {}
+        
+        if (hasCache) showPage(S.currentPage || 'dashboard'); // Refresh UI silently
       } catch (e) {
         if (e.message === 'Timeout_Load') {
-          document.getElementById('main-content').innerHTML = '<div class="empty" style="margin-top:40px"><div class="empty-icon">🔌</div><div class="empty-title">Conexión interrumpida</div><div class="empty-sub">La red no responde o la sesión caducó.</div><div style="display:flex;gap:12px;justify-content:center;margin-top:16px"><button class="btn btn-primary" onclick="window.location.reload()"><i class="ti ti-refresh"></i> Recargar</button><button class="btn btn-ghost" onclick="handleLogout()"><i class="ti ti-logout"></i> Cerrar sesión</button></div></div>';
-          throw e;
+          if (!hasCache) {
+            document.getElementById('main-content').innerHTML = '<div class="empty" style="margin-top:40px"><div class="empty-icon">🔌</div><div class="empty-title">Conexión interrumpida</div><div class="empty-sub">La red no responde o la sesión caducó.</div><div style="display:flex;gap:12px;justify-content:center;margin-top:16px"><button class="btn btn-primary" onclick="window.location.reload()"><i class="ti ti-refresh"></i> Recargar</button><button class="btn btn-ghost" onclick="handleLogout()"><i class="ti ti-logout"></i> Cerrar sesión</button></div></div>';
+            throw e;
+          }
+        } else {
+          console.error(e); if (!hasCache) S.trades = [];
         }
-        console.error(e); S.trades = [];
       }
     }
 
