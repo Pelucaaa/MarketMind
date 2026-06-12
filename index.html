@@ -1463,24 +1463,27 @@
     }
 
     let selectedApunteImg = null;
-    function openAddApunte() {
+    function openAddApunte(editId = null) {
+      let a = null;
+      if (editId) a = S.apuntes.find(x => x.id === editId);
+
       selectedApunteImg = null;
       const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'apunte-modal';
       m.innerHTML = `<div class="modal">
-        <div class="modal-title"><i class="ti ti-book" style="color:var(--lila)"></i> Nuevo Apunte</div>
-        <div class="form-group"><label class="form-label">Título</label><input type="text" class="form-input" id="a-title" placeholder="Ej: Patrón hombro-cabeza-hombro"></div>
-        <div class="form-group"><label class="form-label">Descripción</label><textarea class="form-input" id="a-content" placeholder="¿Qué significa este patrón?"></textarea></div>
+        <div class="modal-title"><i class="ti ti-${editId ? 'edit' : 'book'}" style="color:var(--lila)"></i> ${editId ? 'Editar Apunte' : 'Nuevo Apunte'}</div>
+        <div class="form-group"><label class="form-label">Título</label><input type="text" class="form-input" id="a-title" placeholder="Ej: Patrón hombro-cabeza-hombro" value="${a ? a.title : ''}"></div>
+        <div class="form-group"><label class="form-label">Descripción</label><textarea class="form-input" id="a-content" placeholder="¿Qué significa este patrón?">${a ? (a.content || '') : ''}</textarea></div>
         <div class="form-group">
           <label class="form-label">Imagen (Opcional)</label>
-          <div id="apunte-img-preview" style="display:none;margin-bottom:8px;position:relative">
-            <img id="apunte-img-el" style="width:100%;max-height:160px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border)">
-            <button onclick="removeApunteImage()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.75);border:none;color:#fff;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:14px">✕</button>
+          <div id="apunte-img-preview" style="display:${a && a.image_url ? 'block' : 'none'};margin-bottom:8px;position:relative">
+            <img id="apunte-img-el" src="${a && a.image_url ? a.image_url : ''}" style="width:100%;max-height:160px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border)">
+            <button onclick="removeApunteImage()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.75);border:none;color:#fff;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
           </div>
-          <label class="upload-zone" id="apunte-upload-label"><i class="ti ti-photo"></i> Subir imagen<input type="file" accept="image/*" style="display:none" onchange="previewApunteImage(this)"></label>
+          <label class="upload-zone" id="apunte-upload-label" style="display:${a && a.image_url ? 'none' : 'flex'}"><i class="ti ti-photo"></i> Subir imagen<input type="file" accept="image/*" style="display:none" onchange="previewApunteImage(this)"></label>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
           <button class="btn btn-ghost" onclick="closeModal('apunte-modal')">Cancelar</button>
-          <button class="btn btn-primary" id="save-apunte-btn" onclick="submitApunte()"><i class="ti ti-check"></i> Guardar Apunte</button>
+          <button class="btn btn-primary" id="save-apunte-btn" onclick="submitApunte(${editId || 'null'})"><i class="ti ti-check"></i> ${editId ? 'Actualizar' : 'Guardar Apunte'}</button>
         </div>
       </div>`;
       document.body.appendChild(m);
@@ -1490,19 +1493,45 @@
       const r = new FileReader(); r.onload = e => { document.getElementById('apunte-img-el').src = e.target.result; document.getElementById('apunte-img-preview').style.display = 'block'; document.getElementById('apunte-upload-label').style.display = 'none'; }; r.readAsDataURL(file);
     }
     function removeApunteImage() { selectedApunteImg = null; document.getElementById('apunte-img-preview').style.display = 'none'; document.getElementById('apunte-upload-label').style.display = 'flex'; }
-    async function submitApunte() {
+    async function submitApunte(editId = null) {
       const title = document.getElementById('a-title').value.trim();
       if (!title) { showToast('El título es obligatorio', 'warn'); return; }
       const content = document.getElementById('a-content').value.trim();
       const btn = document.getElementById('save-apunte-btn'); btn.innerHTML = '<div class="spinner"></div> Guardando...'; btn.disabled = true;
       let url = null;
+      let existingApunte = null;
+
+      if (editId) {
+        existingApunte = S.apuntes.find(x => x.id === editId);
+        url = existingApunte?.image_url;
+      }
+
+      if (document.getElementById('apunte-img-preview').style.display === 'none') {
+        url = null;
+      }
       if (selectedApunteImg) { showToast('Subiendo imagen...'); url = await uploadScreenshot(selectedApunteImg); }
+      
       try {
-        const { data, error } = await sb.from('apuntes').insert({ user_id: S.user.id, title, content, image_url: url }).select().single();
+        let data, error;
+        if (editId) {
+          const res = await sb.from('apuntes').update({ title, content, image_url: url }).eq('id', editId).select().single();
+          data = res.data; error = res.error;
+        } else {
+          const res = await sb.from('apuntes').insert({ user_id: S.user.id, title, content, image_url: url }).select().single();
+          data = res.data; error = res.error;
+        }
         if (error) throw error;
-        S.apuntes.unshift(data);
-        closeModal('apunte-modal'); showToast('Apunte guardado'); renderCuaderno();
-      } catch (e) { showToast('Error al guardar apunte', 'warn'); btn.innerHTML = '<i class="ti ti-check"></i> Guardar Apunte'; btn.disabled = false; }
+        
+        if (editId) {
+          const idx = S.apuntes.findIndex(x => x.id === editId);
+          if (idx !== -1) S.apuntes[idx] = { ...S.apuntes[idx], title, content, image_url: url };
+          showToast('Apunte actualizado');
+        } else {
+          S.apuntes.unshift(data);
+          showToast('Apunte guardado');
+        }
+        closeModal('apunte-modal'); renderCuaderno();
+      } catch (e) { showToast('Error al guardar apunte', 'warn'); btn.innerHTML = '<i class="ti ti-check"></i> ' + (editId ? 'Actualizar' : 'Guardar Apunte'); btn.disabled = false; }
     }
     function openApunteDetail(id) {
       const a = S.apuntes.find(x => x.id === id); if (!a) return;
@@ -1510,9 +1539,12 @@
       m.innerHTML = `<div class="modal">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
           <div class="modal-title" style="margin-bottom:0">${a.title}</div>
-          <button class="btn btn-danger btn-sm" onclick="closeModal('apunte-detail-modal');deleteApunte(${id})"><i class="ti ti-trash"></i></button>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" onclick="closeModal('apunte-detail-modal');openAddApunte(${id})"><i class="ti ti-edit"></i> Editar</button>
+            <button class="btn btn-danger btn-sm" onclick="closeModal('apunte-detail-modal');deleteApunte(${id})"><i class="ti ti-trash"></i> Eliminar</button>
+          </div>
         </div>
-        ${a.image_url ? `<img src="${a.image_url}" style="width:100%;border-radius:var(--radius-lg);border:1px solid var(--border);margin-bottom:16px">` : ''}
+        ${a.image_url ? `<div style="position:relative;margin-bottom:16px"><img src="${a.image_url}" style="width:100%;aspect-ratio:16/9;border-radius:var(--radius-lg);object-fit:contain;background:#000;cursor:zoom-in;border:1px solid var(--border)" onclick="openLightbox('${a.image_url}')"><span style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:11px;padding:3px 8px;border-radius:4px">Clic para ampliar</span></div>` : ''}
         <div style="color:var(--text2);font-size:13px;line-height:1.6;white-space:pre-wrap">${a.content || 'Sin contenido'}</div>
         <div style="margin-top:20px;text-align:right"><button class="btn btn-ghost" onclick="closeModal('apunte-detail-modal')">Cerrar</button></div>
       </div>`;
