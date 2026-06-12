@@ -1556,7 +1556,7 @@
     function openApunteDetail(id) {
       const a = S.apuntes.find(x => x.id === id); if (!a) return;
       const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'apunte-detail-modal';
-      m.innerHTML = `<div class="modal" style="max-width: 800px; padding: 32px;">
+      m.innerHTML = `<div class="modal" style="max-width: 1000px; width: 90%; padding: 32px;">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">
           <div class="modal-title" style="margin-bottom:0; font-size: 22px;">${a.title}</div>
           <div style="display:flex;gap:6px">
