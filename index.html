@@ -684,7 +684,7 @@
     function renderTradeList(trades, showImages = false) {
       if (!trades.length) return `<div class="empty"><span class="empty-icon">📋</span><div class="empty-title">Sin trades todavía</div><div class="empty-sub">Registra tu primer trade</div></div>`;
       return trades.map(t => `
-  <div class="trade-row" onclick="openTradeDetail(${t.id})" style="${showImages && t.screenshot_url ? 'align-items:flex-start' : ''}">
+  <div class="trade-row" onclick="openTradeDetail('${t.id}')" style="${showImages && t.screenshot_url ? 'align-items:flex-start' : ''}">
     ${showImages && t.screenshot_url ? `<img src="${t.screenshot_url}" style="width:100px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onclick="event.stopPropagation();openLightbox('${t.screenshot_url}')">` : ''}
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -705,7 +705,7 @@
     let tradeCheckState = {}, selectedEmotion = 7, selectedImageFile = null;
     function openAddTrade(editId = null) {
       let t = null;
-      if (editId) t = S.trades.find(x => x.id === editId);
+      if (editId) t = S.trades.find(x => x.id == editId);
 
       tradeCheckState = {}; selectedEmotion = t ? t.emotion : 7; selectedImageFile = null;
       S.checklist.filter(c => c.active).forEach(c => { tradeCheckState[c.id] = t && t.checklist ? !!t.checklist[c.id] : false; });
@@ -749,7 +749,7 @@
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-ghost" onclick="closeModal('add-modal')">Cancelar</button>
-      <button class="btn btn-primary" id="save-btn" onclick="submitTrade(${editId || 'null'})"><i class="ti ti-check"></i> ${editId ? 'Actualizar y analizar' : 'Guardar y analizar'}</button>
+      <button class="btn btn-primary" id="save-btn" onclick="submitTrade(${editId ? `'${editId}'` : 'null'})"><i class="ti ti-check"></i> ${editId ? 'Actualizar y analizar' : 'Guardar y analizar'}</button>
     </div>
   </div>`;
       document.body.appendChild(m);
@@ -775,7 +775,7 @@
       let screenshot_url = null;
       let existingTrade = null;
       if (editId) {
-        existingTrade = S.trades.find(x => x.id === editId);
+        existingTrade = S.trades.find(x => x.id == editId);
         screenshot_url = existingTrade?.screenshot_url;
       }
       if (document.getElementById('img-preview').style.display === 'none') {
@@ -790,7 +790,7 @@
         if (!saved) { btn.innerHTML = '<i class="ti ti-check"></i> Actualizar y analizar'; btn.disabled = false; return; }
         trade.created_at = existingTrade.created_at;
         trade.screenshot_url = saved.screenshot_url !== undefined ? saved.screenshot_url : screenshot_url;
-        const idx = S.trades.findIndex(x => x.id === editId);
+        const idx = S.trades.findIndex(x => x.id == editId);
         if (idx !== -1) S.trades[idx] = { ...S.trades[idx], ...trade };
       } else {
         const saved = await saveTrade(trade);
@@ -826,7 +826,7 @@
           const d = await res.json(); ai = JSON.parse(d.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim());
         }
       } catch (e) { ai = localAI(trade, pct); }
-      const idx = S.trades.findIndex(t => t.id === trade.id);
+      const idx = S.trades.findIndex(t => t.id == trade.id);
       if (idx >= 0) { S.trades[idx].score = ai.score; S.trades[idx].errors = ai.errores_detectados || []; S.trades[idx].feedback = ai; }
       await updateTradeAI(trade.id, ai.score, ai.errores_detectados || [], ai);
       showToast(`Análisis: ${ai.score}/100`, 'success');
@@ -842,7 +842,7 @@
 
     // ── TRADE DETAIL ─────────────────────────────────────
     function openTradeDetail(id) {
-      const trade = S.trades.find(t => t.id === id); if (!trade) return;
+      const trade = S.trades.find(t => t.id == id); if (!trade) return;
       const fb = trade.feedback;
       const sc = (trade.score || 0) >= 70 ? 'var(--green)' : (trade.score || 0) >= 40 ? 'var(--amber)' : 'var(--red)';
       const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'detail-modal';
@@ -854,8 +854,8 @@
         ${trade.duration_minutes ? `<span style="font-size:12px;color:var(--text3);font-weight:400">· ${trade.duration_minutes}min</span>` : ''}
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-ghost btn-sm" onclick="closeModal('detail-modal');openAddTrade(${id})"><i class="ti ti-edit"></i> Editar</button>
-        <button class="btn btn-danger btn-sm" onclick="closeModal('detail-modal');doDeleteTrade(${id})"><i class="ti ti-trash"></i> Eliminar</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('detail-modal');openAddTrade('${id}')"><i class="ti ti-edit"></i> Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="closeModal('detail-modal');doDeleteTrade('${id}')"><i class="ti ti-trash"></i> Eliminar</button>
       </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
@@ -883,7 +883,7 @@
     }
     async function doDeleteTrade(id) {
       if (!confirm('¿Eliminar este trade?')) return;
-      await deleteTrade(id); S.trades = S.trades.filter(t => t.id !== id);
+      await deleteTrade(id); S.trades = S.trades.filter(t => t.id != id);
       showToast('Trade eliminado'); showPage(S.currentPage);
     }
 
@@ -1628,7 +1628,7 @@
         S.apuntes.forEach(function (a) {
           const dateStr = a.created_at ? a.created_at.slice(0, 10) : '';
           const safeTitle = (a.title || '').replace(/"/g, '&quot;');
-          html += '<div class="card apunte-card" data-title="' + safeTitle + '" style="padding:0;overflow:hidden;cursor:pointer;transition:all 0.2s; min-height:220px; display:flex; flex-direction:column;" onclick="openApunteDetail(' + a.id + ')">';
+          html += '<div class="card apunte-card" data-title="' + safeTitle + '" style="padding:0;overflow:hidden;cursor:pointer;transition:all 0.2s; min-height:220px; display:flex; flex-direction:column;" onclick="openApunteDetail(\'' + a.id + '\')">';
           if (a.image_url) {
             html += '<img src="' + a.image_url + '" style="width:100%;height:180px;object-fit:cover;border-bottom:1px solid var(--border)">';
           } else {
@@ -1664,7 +1664,7 @@
     let selectedApunteImg = null;
     function openAddApunte(editId = null) {
       let a = null;
-      if (editId) a = S.apuntes.find(x => x.id === editId);
+      if (editId) a = S.apuntes.find(x => x.id == editId);
 
       selectedApunteImg = null;
       const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'apunte-modal';
@@ -1682,7 +1682,7 @@
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
           <button class="btn btn-ghost" onclick="closeModal('apunte-modal')">Cancelar</button>
-          <button class="btn btn-primary" id="save-apunte-btn" onclick="submitApunte(${editId || 'null'})"><i class="ti ti-check"></i> ${editId ? 'Actualizar' : 'Guardar Apunte'}</button>
+          <button class="btn btn-primary" id="save-apunte-btn" onclick="submitApunte(${editId ? `'${editId}'` : 'null'})"><i class="ti ti-check"></i> ${editId ? 'Actualizar' : 'Guardar Apunte'}</button>
         </div>
       </div>`;
       document.body.appendChild(m);
@@ -1701,7 +1701,7 @@
       let existingApunte = null;
 
       if (editId) {
-        existingApunte = S.apuntes.find(x => x.id === editId);
+        existingApunte = S.apuntes.find(x => x.id == editId);
         url = existingApunte?.image_url;
       }
 
@@ -1722,7 +1722,7 @@
         if (error) throw error;
         
         if (editId) {
-          const idx = S.apuntes.findIndex(x => x.id === editId);
+          const idx = S.apuntes.findIndex(x => x.id == editId);
           if (idx !== -1) S.apuntes[idx] = { ...S.apuntes[idx], title, content, image_url: url };
           showToast('Apunte actualizado');
         } else {
@@ -1733,14 +1733,14 @@
       } catch (e) { showToast('Error al guardar apunte', 'warn'); btn.innerHTML = '<i class="ti ti-check"></i> ' + (editId ? 'Actualizar' : 'Guardar Apunte'); btn.disabled = false; }
     }
     function openApunteDetail(id) {
-      const a = S.apuntes.find(x => x.id === id); if (!a) return;
+      const a = S.apuntes.find(x => x.id == id); if (!a) return;
       const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'apunte-detail-modal';
       m.innerHTML = `<div class="modal" style="max-width: 1000px; width: 90%; padding: 32px;">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">
           <div class="modal-title" style="margin-bottom:0; font-size: 22px;">${a.title}</div>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost btn-sm" onclick="closeModal('apunte-detail-modal');openAddApunte(${id})"><i class="ti ti-edit"></i> Editar</button>
-            <button class="btn btn-danger btn-sm" onclick="closeModal('apunte-detail-modal');deleteApunte(${id})"><i class="ti ti-trash"></i> Eliminar</button>
+            <button class="btn btn-ghost btn-sm" onclick="closeModal('apunte-detail-modal');openAddApunte('${id}')"><i class="ti ti-edit"></i> Editar</button>
+            <button class="btn btn-danger btn-sm" onclick="closeModal('apunte-detail-modal');deleteApunte('${id}')"><i class="ti ti-trash"></i> Eliminar</button>
           </div>
         </div>
         ${a.image_url ? `<div style="position:relative;margin-bottom:20px"><img src="${a.image_url}" style="width:100%;aspect-ratio:16/9;border-radius:var(--radius-lg);object-fit:contain;background:#000;cursor:zoom-in;border:1px solid var(--border)" onclick="openLightbox('${a.image_url}')"><span style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:4px 10px;border-radius:4px">Clic para ampliar</span></div>` : ''}
@@ -1751,7 +1751,7 @@
     }
     async function deleteApunte(id) {
       if (!confirm('¿Eliminar apunte?')) return;
-      S.apuntes = S.apuntes.filter(x => x.id !== id); renderCuaderno();
+      S.apuntes = S.apuntes.filter(x => x.id != id); renderCuaderno();
       try { await sb.from('apuntes').delete().eq('id', id).eq('user_id', S.user.id); } catch (e) { }
     }
 
