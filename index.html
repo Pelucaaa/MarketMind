@@ -821,9 +821,9 @@
           const prompt = `Coach trading profesional. Analiza este trade de forma justa y equilibrada. Valora positivamente el resultado si fue ganador (R > 0) y sé menos severo con las emociones. SOLO JSON sin markdown.\nTrade: Par=${trade.pair},Dir=${trade.direction},R=${trade.result},Setup=${trade.setup},Sesión=${trade.session},TF=${trade.timeframe},Emoción=${trade.emotion}/10,Confianza=${trade.confidence}/10,Estrés=${trade.stress}/10,Checklist=${pct}%,Duración=${trade.duration_minutes || '?'}min,Notas="${trade.notes || 'ninguna'}"\nJSON español: {"score":0-100,"lo_que_hiciste_bien":["p1","p2"],"lo_que_hiciste_mal":["p1","p2"],"errores_detectados":[],"recomendacion":"frase","resumen":"2-3 frases"}`;
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 12000);
-          const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': S.apiKey, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] }), signal: controller.signal });
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${S.apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }), signal: controller.signal });
           clearTimeout(timeoutId);
-          const d = await res.json(); ai = JSON.parse(d.content[0].text.replace(/```json|```/g, '').trim());
+          const d = await res.json(); ai = JSON.parse(d.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim());
         }
       } catch (e) { ai = localAI(trade, pct); }
       const idx = S.trades.findIndex(t => t.id === trade.id);
@@ -1138,8 +1138,8 @@
         if (!S.apiKey) { plan = buildLocalPlan(s, topErr); }
         else {
           const prompt = `Coach trading prop firm. Plan semanal JSON sin markdown.\nDatos: WR=${s.wr}%,RR=${s.rr}R,PnL=${s.pnl}R,Trades=${s.count},MejorSetup="${s.bestSetup}",MejorSesión="${s.bestSession}",Errores=${topErr.join(',') || 'ninguno'}\nJSON español: {"resumen":"texto","fortalezas":["p1","p2","p3"],"debilidades":["p1","p2","p3"],"reglas":["r1","r2","r3","r4"],"setups_permitidos":["s1","s2"],"comportamientos_prohibidos":["c1","c2","c3"],"riesgo_max_diario":"XR","drawdown_max_semanal":"XR","objetivo_semanal":"XR","mensaje_motivacional":"frase"}`;
-          const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': S.apiKey, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }) });
-          const d = await res.json(); plan = JSON.parse(d.content[0].text.replace(/```json|```/g, '').trim());
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${S.apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+          const d = await res.json(); plan = JSON.parse(d.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim());
         }
       } catch (e) { plan = buildLocalPlan(s, topErr); }
       S.weeklyPlan = plan; await saveWeeklyPlan(plan);
@@ -1762,9 +1762,9 @@
   <div class="grid-2">
     <div>
       <div class="card" style="margin-bottom:14px">
-        <div class="card-header"><span class="card-title">API Key Anthropic (opcional)</span></div>
-        <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.7">Sin API key la IA funciona en modo local. Con tu clave obtendrás análisis más precisos.</p>
-        <div class="form-group"><input type="password" class="form-input" id="api-key-input" placeholder="sk-ant-..." value="${S.apiKey}"></div>
+        <div class="card-header"><span class="card-title">API Key Google Gemini (opcional)</span></div>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.7">API Key gratuita de Google Gemini. Consíguela en aistudio.google.com sin tarjeta de crédito.</p>
+        <div class="form-group"><input type="password" class="form-input" id="api-key-input" placeholder="AIza..." value="${S.apiKey}"></div>
         <button class="btn btn-primary btn-sm" onclick="saveApiKey()"><i class="ti ti-check"></i> Guardar clave</button>
       </div>
       <div class="card">
