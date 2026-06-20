@@ -212,7 +212,7 @@
       const today = new Date().toISOString().split('T')[0];
 
       const pTrades = sb.from('trades').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true });
-      const pCfg = sb.from('checklist_config').select('items').eq('user_id', S.user.id).maybeSingle();
+      const pCfg = sb.from('checklist_config').select('*').eq('user_id', S.user.id).maybeSingle();
       const pPlans = sb.from('weekly_plans').select('plan').eq('user_id', S.user.id).order('created_at', { ascending: false }).limit(1);
       const pHabits = sb.from('habits').select('*').eq('user_id', S.user.id).order('created_at', { ascending: true });
       const pLogs = sb.from('habit_logs').select('*').eq('user_id', S.user.id).gte('log_date', from90);
@@ -220,15 +220,14 @@
       const pGoal = sb.from('monthly_goals').select('*').eq('user_id', S.user.id).eq('month', month).maybeSingle();
       const pPremarket = sb.from('premarket').select('*').eq('user_id', S.user.id).eq('entry_date', today).maybeSingle();
       const pApuntes = sb.from('apuntes').select('*').eq('user_id', S.user.id).order('created_at', { ascending: false });
-      const pUserCfg = sb.from('user_config').select('*').eq('user_id', S.user.id).maybeSingle();
 
       try {
         const results = await Promise.race([
-          Promise.allSettled([pTrades, pCfg, pPlans, pHabits, pLogs, pDiary, pGoal, pPremarket, pApuntes, pUserCfg]),
+          Promise.allSettled([pTrades, pCfg, pPlans, pHabits, pLogs, pDiary, pGoal, pPremarket, pApuntes]),
           new Promise((_, r) => setTimeout(() => r(new Error('Timeout_Load')), 15000))
         ]);
 
-        const [rTrades, rCfg, rPlans, rHabits, rLogs, rDiary, rGoal, rPremarket, rApuntes, rUserCfg] = results;
+        const [rTrades, rCfg, rPlans, rHabits, rLogs, rDiary, rGoal, rPremarket, rApuntes] = results;
 
         if (rTrades.status === 'fulfilled' && !rTrades.value.error) {
           S.trades = (rTrades.value.data || []).map(t => ({ ...t, result: parseFloat(t.result), checklist: t.checklist || {}, errors: t.errors || [], feedback: t.feedback || null, screenshot_url: t.screenshot_url || null }));
@@ -237,7 +236,14 @@
           if (rTrades.status === 'fulfilled' && rTrades.value.error) console.error(rTrades.value.error);
         }
 
-        if (rCfg.status === 'fulfilled' && rCfg.value.data?.items?.length) S.checklist = rCfg.value.data.items;
+        if (rCfg.status === 'fulfilled' && rCfg.value.data) {
+          const d = rCfg.value.data;
+          if (d.items?.length) S.checklist = d.items;
+          if (d.custom_pairs) S.customPairs = d.custom_pairs;
+          if (d.custom_setups) S.customSetups = d.custom_setups;
+          if (d.custom_sessions) S.customSessions = d.custom_sessions;
+          if (d.custom_timeframes) S.customTimeframes = d.custom_timeframes;
+        }
         if (rPlans.status === 'fulfilled' && rPlans.value.data?.length) S.weeklyPlan = rPlans.value.data[0].plan;
         if (rHabits.status === 'fulfilled' && rHabits.value.data) S.habits = rHabits.value.data; else S.habits = [];
 
@@ -250,12 +256,6 @@
         if (rGoal.status === 'fulfilled' && rGoal.value.data) S.monthlyGoal = rGoal.value.data; else S.monthlyGoal = null;
         if (rPremarket.status === 'fulfilled' && rPremarket.value.data) S.premarket = rPremarket.value.data; else S.premarket = {};
         if (rApuntes.status === 'fulfilled' && rApuntes.value.data) S.apuntes = rApuntes.value.data; else S.apuntes = [];
-        if (rUserCfg && rUserCfg.status === 'fulfilled' && rUserCfg.value.data) {
-          S.customPairs = rUserCfg.value.data.custom_pairs;
-          S.customSetups = rUserCfg.value.data.custom_setups;
-          S.customSessions = rUserCfg.value.data.custom_sessions;
-          S.customTimeframes = rUserCfg.value.data.custom_timeframes;
-        }
 
         try {
           const toCache = {
@@ -329,8 +329,8 @@
 
     async function updateTradeAI(id, score, errors, feedback) { try { await sb.from('trades').update({ score, errors, feedback }).eq('id', id).eq('user_id', S.user.id); } catch (e) { } }
     async function deleteTrade(id) { await sb.from('trades').delete().eq('id', id).eq('user_id', S.user.id); }
-    async function saveChecklistCfg() { try { await sb.from('checklist_config').upsert({ user_id: S.user.id, items: S.checklist }, { onConflict: 'user_id' }); } catch (e) { } }
-    async function saveUserCfg() { try { await sb.from('user_config').upsert({ user_id: S.user.id, custom_pairs: S.customPairs, custom_setups: S.customSetups, custom_sessions: S.customSessions, custom_timeframes: S.customTimeframes }, { onConflict: 'user_id' }); } catch (e) { } }
+    async function saveChecklistCfg() { await saveUserCfg(); }
+    async function saveUserCfg() { try { await sb.from('checklist_config').upsert({ user_id: S.user.id, custom_pairs: S.customPairs, custom_setups: S.customSetups, custom_sessions: S.customSessions, custom_timeframes: S.customTimeframes, items: S.checklist }, { onConflict: 'user_id' }); } catch (e) { } }
     async function saveWeeklyPlan(plan) { const today = new Date().toISOString().split('T')[0]; try { await sb.from('weekly_plans').insert({ user_id: S.user.id, week_start: today, plan }); } catch (e) { } }
     async function uploadScreenshot(file) {
       if (!file) return null;
