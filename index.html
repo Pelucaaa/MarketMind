@@ -464,51 +464,27 @@
       return { pnl: +total.toFixed(2), wr, rr, weekPnl: +weekPnl.toFixed(2), winStreak: ws, loseStreak: ls, bestSetup: bS, bestSession: bSe, count: t.length, maxDrawdown: +maxDD.toFixed(2), disciplineStreak: ds };
     }
 
-    function calcThermometer() {
-      const s = calcStats();
-      if (!S.trades.length) return 5;
-      let score = 0;
-      // WR reciente (últimos 10 trades)
-      const recent = S.trades.slice(-10);
-      const recentWR = recent.filter(t => t.result > 0).length / recent.length;
-      score += recentWR * 3; // 0-3
-      // Disciplina (racha)
-      score += Math.min(s.disciplineStreak / 7 * 2, 2); // 0-2
-      // Hábitos (últimos 7 días)
-      const today = new Date().toISOString().split('T')[0];
-      const days7 = []; for (let i = 6; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000); days7.push(d.toISOString().split('T')[0]); }
-      let habitScore = 0;
-      if (S.habits.length > 0) {
-        const total = S.habits.length * 7;
-        const done = days7.reduce((acc, d) => acc + S.habits.filter(h => S.habitLogs[`${h.id}_${d}`]).length, 0);
-        habitScore = (done / total) * 2;
-      } else habitScore = 1;
-      score += habitScore; // 0-2
-      // Emoción media últimos trades
-      const emotionAvg = recent.reduce((a, b) => a + (b.emotion || 5), 0) / recent.length;
-      score += (emotionAvg / 10) * 2; // 0-2
-      // Sin alertas de riesgo
-      const todayTrades = S.trades.filter(t => t.created_at?.slice(0, 10) === today);
-      const todayPnl = todayTrades.reduce((a, b) => a + b.result, 0);
-      if (todayPnl >= -1) score += 1;
-      return Math.max(1, Math.min(10, Math.round(score)));
-    }
 
     function calcErrors() { const c = {}; ERROR_TYPES.forEach(e => c[e] = 0); S.trades.forEach(t => (t.errors || []).forEach(e => { if (c[e] !== undefined) c[e]++ })); return c; }
 
     function calcPatterns() {
       const t = S.trades; if (t.length < 3) return []; const p = [];
-      const sm = {}; t.forEach(x => { sm[x.session] = (sm[x.session] || []); sm[x.session].push(x.result) });
-      let wS = null, wA = 999; Object.entries(sm).forEach(([k, v]) => { const a = v.reduce((a, b) => a + b, 0) / v.length; if (a < wA && v.length > 1) { wA = a; wS = k } });
-      if (wS && wA < 0) p.push({ type: 'danger', text: `Sesión más débil: ${wS} con ${wA.toFixed(1)}R de media` });
-      const sp = {}; t.forEach(x => { sp[x.setup] = (sp[x.setup] || []); sp[x.setup].push(x.result) });
-      let bS = null, bA = -999; Object.entries(sp).forEach(([k, v]) => { const a = v.reduce((a, b) => a + b, 0) / v.length; if (a > bA && v.length > 1) { bA = a; bS = k } });
-      if (bS) p.push({ type: 'green', text: `Setup más rentable: "${bS}" con +${bA.toFixed(1)}R` });
+      const sm = {}; t.forEach(x => { sm[x.session] = (sm[x.session] || []); sm[x.session].push(x) });
+      let wS = null, wA = 999, wT = []; Object.entries(sm).forEach(([k, v]) => { const a = v.reduce((a, b) => a + b.result, 0) / v.length; if (a < wA && v.length > 1) { wA = a; wS = k; wT = v; } });
+      if (wS && wA < 0) p.push({ id: 'p1', type: 'danger', text: `Sesión más débil: ${wS} con ${wA.toFixed(1)}R de media`, trades: wT });
+      
+      const sp = {}; t.forEach(x => { sp[x.setup] = (sp[x.setup] || []); sp[x.setup].push(x) });
+      let bS = null, bA = -999, bT = []; Object.entries(sp).forEach(([k, v]) => { const a = v.reduce((a, b) => a + b.result, 0) / v.length; if (a > bA && v.length > 1) { bA = a; bS = k; bT = v; } });
+      if (bS) p.push({ id: 'p2', type: 'green', text: `Setup más rentable: "${bS}" con +${bA.toFixed(1)}R`, trades: bT });
+      
       const nc = t.filter(x => Object.values(x.checklist || {}).filter(v => !v).length > 3);
-      if (nc.length > 1) { const wr = nc.filter(x => x.result > 0).length / nc.length; if (wr < 0.4) p.push({ type: 'danger', text: `Pierdes dinero sin checklist (${Math.round(wr * 100)}% WR)` }); }
-      for (let i = 1; i < t.length; i++) { if (t[i - 1].result < 0 && (t[i].errors || []).includes('Revenge Trading')) { p.push({ type: 'warn', text: 'Haces revenge trading después de pérdidas' }); break; } }
+      if (nc.length > 1) { const wr = nc.filter(x => x.result > 0).length / nc.length; if (wr < 0.4) p.push({ id: 'p3', type: 'danger', text: `Pierdes dinero sin checklist (${Math.round(wr * 100)}% WR)`, trades: nc }); }
+      
+      const revT = []; for (let i = 1; i < t.length; i++) { if (t[i - 1].result < 0 && (t[i].errors || []).includes('Revenge Trading')) { revT.push(t[i]); } }
+      if (revT.length > 0) p.push({ id: 'p4', type: 'warn', text: 'Haces revenge trading después de pérdidas', trades: revT });
+      
       const le = t.filter(x => x.emotion <= 4);
-      if (le.length > 1) { const a = le.reduce((a, b) => a + b.result, 0) / le.length; if (a < 0) p.push({ type: 'warn', text: `Emoción baja (≤4) → PnL medio ${a.toFixed(1)}R` }); }
+      if (le.length > 1) { const a = le.reduce((a, b) => a + b.result, 0) / le.length; if (a < 0) p.push({ id: 'p5', type: 'warn', text: `Emoción baja (≤4) → PnL medio ${a.toFixed(1)}R`, trades: le }); }
       return p;
     }
 
@@ -633,9 +609,6 @@
     // ── DASHBOARD ────────────────────────────────────────
     function renderDashboard() {
       const s = calcStats();
-      const thermo = calcThermometer();
-      const thermoColor = thermo >= 7 ? 'var(--green)' : thermo >= 4 ? 'var(--amber)' : 'var(--red)';
-      const thermoLabel = thermo >= 8 ? 'Excelente forma' : thermo >= 6 ? 'Buena forma' : thermo >= 4 ? 'Forma regular' : 'Necesitas descansar';
       const today = new Date().toISOString().split('T')[0];
       const todayTrades = S.trades.filter(t => t.created_at?.slice(0, 10) === today);
       const todayPnl = todayTrades.reduce((a, b) => a + b.result, 0);
@@ -652,22 +625,6 @@
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost btn-sm" onclick="openPremarket()"><i class="ti ti-sun"></i> Pre-market${hasPM ? ' ✓' : ''}</button>
       <button class="btn btn-primary" onclick="openAddTrade()"><i class="ti ti-plus"></i> Nuevo Trade</button>
-    </div>
-  </div>
-
-  <!-- Termómetro de forma -->
-  <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,rgba(167,139,250,0.06),var(--bg2))">
-    <div style="display:flex;align-items:center;justify-content:space-between">
-      <div>
-        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:6px">🌡️ Termómetro de forma</div>
-        <div style="font-size:36px;font-weight:700;color:${thermoColor};letter-spacing:-0.04em;line-height:1">${thermo}<span style="font-size:16px;color:var(--text3);font-weight:400">/10</span></div>
-        <div style="font-size:13px;color:${thermoColor};margin-top:4px">${thermoLabel}</div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-        <div style="display:flex;gap:6px;align-items:center"><span class="tooltip-container" style="font-size:12px;color:var(--text3)">Disciplina<div class="tooltip-text">Días consecutivos operando con checklist ≥ 80%</div></span><div style="width:80px;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.min(100, s.disciplineStreak / 7 * 100)}%;background:var(--lila);border-radius:3px"></div></div><span style="font-size:11px;color:var(--lila);font-family:'Geist Mono',monospace">${s.disciplineStreak}d</span></div>
-        <div style="display:flex;gap:6px;align-items:center"><span class="tooltip-container" style="font-size:12px;color:var(--text3)">Drawdown<div class="tooltip-text">Mayor caída desde un pico de equity</div></span><div style="width:80px;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.min(100, s.maxDrawdown / 4 * 100)}%;background:var(--red);border-radius:3px"></div></div><span style="font-size:11px;color:var(--red);font-family:'Geist Mono',monospace">${s.maxDrawdown}R</span></div>
-        ${goalPct !== null ? `<div style="display:flex;gap:6px;align-items:center"><span style="font-size:12px;color:var(--text3)">Objetivo</span><div style="width:80px;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div style="height:100%;width:${goalPct}%;background:var(--green);border-radius:3px"></div></div><span style="font-size:11px;color:var(--green);font-family:'Geist Mono',monospace">${goalPct}%</span></div>` : ''}
-      </div>
     </div>
   </div>
 
@@ -979,7 +936,7 @@
   <div class="grid-2" style="margin-bottom:14px">
     <div class="card">
       <div class="card-header"><span class="card-title">Comparativa de Setups</span></div>
-      <div class="chart-area" style="height:200px"><canvas id="setup-chart"></canvas></div>
+      <div style="height:200px;overflow-y:auto;padding-right:4px">${renderSetupRanking()}</div>
     </div>
     <div class="card"><div class="card-header"><span class="card-title">Por sesión</span></div>${renderSessionAnalysis()}</div>
   </div>
@@ -992,9 +949,31 @@
   </div>
 
   <div class="card"><div class="card-header"><span class="card-title">Patrones IA</span></div>
-    ${calcPatterns().length ? calcPatterns().map(p => `<div class="insight-card ${p.type === 'danger' ? 'danger' : p.type === 'warn' ? 'warn' : ''}">${p.text}</div>`).join('') : '<div class="empty" style="padding:20px 0"><span class="empty-icon">🔍</span><div class="empty-sub">Necesitas más trades</div></div>'}
+    ${calcPatterns().length ? calcPatterns().map(p => {
+      const tradesHtml = p.trades.map(t => {
+        const d = t.created_at ? new Date(t.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : '';
+        const color = t.result > 0 ? 'var(--green)' : 'var(--red)';
+        const dir = t.direction === 'Compra' ? 'Long' : 'Short';
+        const stp = t.setup ? t.setup.substring(0, 10) : '';
+        return `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);color:${color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          <span style="color:var(--text3)">${t.pair} · ${dir} · </span><span style="font-weight:600">${t.result > 0 ? '+' : ''}${t.result}R</span><span style="color:var(--text3)"> · ${t.session} · ${t.timeframe} · ${stp} · ${d}</span>
+        </div>`;
+      }).join('');
+      return `<div class="insight-card ${p.type === 'danger' ? 'danger' : p.type === 'warn' ? 'warn' : ''}" style="cursor:pointer" onclick="togglePattern('${p.id}')">
+        ${p.text}
+      </div>
+      <div id="pattern-trades-${p.id}" class="pattern-trades-list" style="display:none;margin-bottom:12px;padding:0 8px">${tradesHtml}</div>`;
+    }).join('') : '<div class="empty" style="padding:20px 0"><span class="empty-icon">🔍</span><div class="empty-sub">Necesitas más trades</div></div>'}
   </div>`;
-      setTimeout(() => { renderPeriodChart('week'); renderSetupChart(); updateComparativa(); }, 80);
+      setTimeout(() => { renderPeriodChart('week'); updateComparativa(); }, 80);
+    }
+
+    function togglePattern(id) {
+      const el = document.getElementById('pattern-trades-' + id);
+      if (!el) return;
+      if (el.style.display === 'block') { el.style.display = 'none'; return; }
+      document.querySelectorAll('.pattern-trades-list').forEach(x => x.style.display = 'none');
+      el.style.display = 'block';
     }
 
     function getPeriodTrades(periodKey) {
@@ -1072,16 +1051,51 @@
       S.periodChart = new Chart(canvas, { type: 'bar', data: { labels, datasets: [{ label: 'PnL', data: pnlData, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.raw}R` }, backgroundColor: '#222228', bodyColor: '#f0eff4', borderColor: '#35353f', borderWidth: 1 } }, scales: { x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5e5c72', font: { size: 10 } } }, y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5e5c72', font: { size: 10 }, callback: v => v + 'R' } } } } });
     }
 
-    function renderSetupChart() {
-      const canvas = document.getElementById('setup-chart'); if (!canvas) return;
-      if (S.setupChart) { S.setupChart.destroy(); S.setupChart = null; }
-      const sm = {}; S.trades.forEach(t => { if (!sm[t.setup]) sm[t.setup] = { pnl: 0, count: 0, wins: 0 }; sm[t.setup].pnl += t.result; sm[t.setup].count++; if (t.result > 0) sm[t.setup].wins++; });
-      const entries = Object.entries(sm).filter(([, v]) => v.count >= 2).sort((a, b) => b[1].pnl - a[1].pnl).slice(0, 6);
-      if (!entries.length) return;
-      const labels = entries.map(([k]) => k.substring(0, 18));
-      const data = entries.map(([, v]) => +(v.pnl / v.count).toFixed(2));
-      const colors = data.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
-      S.setupChart = new Chart(canvas, { type: 'bar', data: { labels, datasets: [{ label: 'Avg R', data, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.raw}R avg` }, backgroundColor: '#222228', bodyColor: '#f0eff4', borderColor: '#35353f', borderWidth: 1 } }, scales: { x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5e5c72', font: { size: 10 }, callback: v => v + 'R' } }, y: { grid: { display: false }, ticks: { color: '#a09db8', font: { size: 11 } } } } } });
+    function renderSetupRanking() {
+      const setupsList = S.customSetups && S.customSetups.length ? S.customSetups : SETUPS;
+      const sm = {}; 
+      setupsList.forEach(s => sm[s] = { pnl: 0, count: 0 });
+      S.trades.forEach(t => { 
+        if (sm[t.setup]) { 
+          sm[t.setup].pnl += t.result; 
+          sm[t.setup].count++; 
+        } 
+      });
+
+      const ranking = setupsList.map(s => {
+        const d = sm[s];
+        const rr = d.count > 0 ? d.pnl / d.count : 0;
+        return { name: s, rr, count: d.count };
+      }).sort((a, b) => {
+        if (a.count === 0 && b.count > 0) return 1;
+        if (b.count === 0 && a.count > 0) return -1;
+        return b.rr - a.rr;
+      });
+
+      const maxRR = Math.max(...ranking.map(r => Math.abs(r.rr)), 1);
+      
+      return ranking.map((r, i) => {
+        if (r.count === 0) {
+           return `<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);color:var(--text3)">
+              <div style="font-size:10px;font-weight:700;color:var(--text3);width:20px;text-align:center">${i+1}º</div>
+              <div style="flex:1;font-size:12px;margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+              <div style="font-size:11px;color:var(--text3);width:30px;text-align:right">(0)</div>
+              <div style="flex:1.5;margin-left:12px;opacity:0.3"><div style="height:4px;background:var(--bg4);border-radius:2px"></div></div>
+              <div style="width:40px;text-align:right;font-size:11px;font-family:'Geist Mono',monospace;color:var(--text3)">Sin datos</div>
+           </div>`;
+        }
+        
+        const pct = Math.min(100, Math.abs(r.rr) / maxRR * 100);
+        const color = r.rr >= 0 ? 'var(--green)' : 'var(--red)';
+        
+        return `<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+           <div style="font-size:10px;font-weight:700;color:var(--lila);width:20px;text-align:center">${i+1}º</div>
+           <div style="flex:1;font-size:12px;font-weight:500;margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)">${r.name}</div>
+           <div style="font-size:11px;color:var(--text3);width:30px;text-align:right">(${r.count})</div>
+           <div style="flex:1.5;margin-left:12px"><div style="height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;display:flex;justify-content:${r.rr >= 0 ? 'flex-start' : 'flex-end'}"><div style="height:100%;width:${pct}%;background:${color};border-radius:2px"></div></div></div>
+           <div style="width:40px;text-align:right;font-size:11px;font-family:'Geist Mono',monospace;font-weight:600;color:${color}">${r.rr >= 0 ? '+' : ''}${r.rr.toFixed(1)}R</div>
+        </div>`;
+      }).join('');
     }
 
     function renderSessionAnalysis() {
@@ -1097,7 +1111,41 @@
       const b = { high: [], mid: [], low: [] };
       S.trades.forEach(t => { if (t.emotion >= 7) b.high.push(t.result); else if (t.emotion >= 4) b.mid.push(t.result); else b.low.push(t.result); });
       const avg = a => a.length ? +(a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : null;
-      return `<div class="grid-3">${[{ label: 'Alto 7–10', arr: b.high, color: 'var(--green)' }, { label: 'Medio 4–6', arr: b.mid, color: 'var(--amber)' }, { label: 'Bajo 1–3', arr: b.low, color: 'var(--red)' }].map(d => `<div class="metric"><div class="metric-label">${d.label}</div><div class="metric-value" style="color:${d.color};font-size:20px">${avg(d.arr) !== null ? (avg(d.arr) >= 0 ? '+' : '') + avg(d.arr) + 'R' : '—'}</div><div class="metric-sub">${d.arr.length} trades${d.arr.length ? ' · ' + Math.round(d.arr.filter(r => r > 0).length / d.arr.length * 100) + '% WR' : ''}</div></div>`).join('')}</div>`;
+      return `<div class="grid-3">${[
+        { id: 'high', label: 'Alto 7–10', arr: b.high, color: 'var(--green)' }, 
+        { id: 'mid', label: 'Medio 4–6', arr: b.mid, color: 'var(--amber)' }, 
+        { id: 'low', label: 'Bajo 1–3', arr: b.low, color: 'var(--red)' }
+      ].map(d => `<div class="metric">
+          <div class="metric-label">${d.label}</div>
+          <div class="metric-value" style="color:${d.color};font-size:20px">${avg(d.arr) !== null ? (avg(d.arr) >= 0 ? '+' : '') + avg(d.arr) + 'R' : '—'}</div>
+          <div class="metric-sub">${d.arr.length} trades${d.arr.length ? ' · ' + Math.round(d.arr.filter(r => r > 0).length / d.arr.length * 100) + '% WR' : ''}</div>
+          ${d.arr.length ? `<button class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%;font-size:11px" onclick="toggleEmotionInfo('${d.id}', '${d.label}', ${avg(d.arr)}, ${d.arr.length}, ${Math.round(d.arr.filter(r => r > 0).length / d.arr.length * 100)})" id="btn-emo-${d.id}">Más info</button>` : ''}
+          <div id="emo-info-${d.id}" style="display:none;margin-top:10px;font-size:12px;color:var(--text2);text-align:left;line-height:1.4;background:var(--bg3);padding:8px;border-radius:6px;border:1px solid var(--border)"></div>
+        </div>`).join('')}</div>`;
+    }
+
+    async function toggleEmotionInfo(id, label, avgR, count, wr) {
+      const div = document.getElementById('emo-info-' + id);
+      const btn = document.getElementById('btn-emo-' + id);
+      if (div.style.display === 'block') { div.style.display = 'none'; btn.innerText = 'Más info'; return; }
+      
+      ['high', 'mid', 'low'].forEach(x => { if (x !== id) { const el = document.getElementById('emo-info-' + x); if (el) el.style.display = 'none'; const b = document.getElementById('btn-emo-' + x); if (b) b.innerText = 'Más info'; } });
+      
+      div.style.display = 'block';
+      if (!div.dataset.loaded) {
+        div.innerHTML = '<div class="spinner" style="width:14px;height:14px"></div>';
+        btn.innerText = 'Ocultar';
+        const prompt = `Como coach de trading, analiza brevemente (2-3 frases máximo) qué significa para este trader operar en un estado emocional '${label}' teniendo un Win Rate de ${wr}% y un RR medio de ${avgR}R en ${count} trades. ¿Qué le recomiendas hacer al respecto?`;
+        try {
+          const res = await callGeminiAPI(prompt, false);
+          div.innerHTML = res;
+          div.dataset.loaded = 'true';
+        } catch (e) {
+          div.innerHTML = 'Error al cargar info: ' + (e.message || e);
+        }
+      } else {
+        btn.innerText = 'Ocultar';
+      }
     }
 
     // ── OBJETIVOS ──────────────────────────────────────────
@@ -1492,27 +1540,99 @@
     function openPremarket() {
       const today = new Date().toISOString().split('T')[0];
       const pm = S.premarket?.entry_date === today ? S.premarket : {};
+      const checks = S.checklist.filter(c => c.active).map(c => `<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;color:var(--text2);cursor:pointer"><input type="checkbox" class="pm-chk" data-id="${c.id}" ${pm.checklist_results && pm.checklist_results[c.id] ? 'checked' : ''} style="accent-color:var(--lila);width:16px;height:16px"> ${c.label}</label>`).join('');
+      
       const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'pm-modal';
       m.innerHTML = `<div class="modal" style="max-width:480px">
     <div class="modal-title"><i class="ti ti-sun" style="color:var(--amber)"></i> Pre-market — ${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' })}</div>
-    <div class="form-group"><label class="form-label">¿Cuál es el bias del mercado hoy?</label><input type="text" class="form-input" id="pm-bias" placeholder="Ej: Alcista en XAUUSD, bajista en NAS100..." value="${pm.bias || ''}"></div>
-    <div class="form-group"><label class="form-label">¿Qué sesiones vas a operar?</label><select class="form-input" id="pm-sessions"><option ${pm.sessions === 'Londres' ? 'selected' : ''}>Londres</option><option ${pm.sessions === 'Nueva York' ? 'selected' : ''}>Nueva York</option><option ${pm.sessions === 'Asia' ? 'selected' : ''}>Asia</option><option ${pm.sessions === 'Londres + NY' ? 'selected' : ''}>Londres + NY</option><option ${pm.sessions === 'Todas' ? 'selected' : ''}>Todas</option></select></div>
-    <div class="form-group"><label class="form-label">¿Cuál es tu riesgo máximo hoy?</label><input type="text" class="form-input" id="pm-risk" placeholder="Ej: 2R máximo, 3 trades máximo" value="${pm.max_risk || ''}"></div>
-    <div class="form-group"><label class="form-label">Notas adicionales / niveles clave</label><textarea class="form-input" id="pm-notes" placeholder="Soportes, resistencias, eventos macro...">${pm.notes || ''}</textarea></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn btn-ghost" onclick="closeModal('pm-modal')">Cancelar</button>
-      <button class="btn btn-primary" onclick="submitPremarket()"><i class="ti ti-check"></i> Guardar pre-market</button>
+    <div id="pm-form">
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Par</label><select class="form-input" id="pm-par">${(S.customPairs && S.customPairs.length ? S.customPairs : PAIRS).map(p => `<option ${pm.par === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">Dirección esperada</label><select class="form-input" id="pm-dir"><option ${pm.direccion === 'Compra' ? 'selected' : ''}>Compra</option><option ${pm.direccion === 'Venta' ? 'selected' : ''}>Venta</option></select></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Sesión</label><select class="form-input" id="pm-sesion">${(S.customSessions && S.customSessions.length ? S.customSessions : SESSIONS).map(s => `<option ${pm.sesion === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">Timeframe</label><select class="form-input" id="pm-tf">${(S.customTimeframes && S.customTimeframes.length ? S.customTimeframes : TIMEFRAMES).map(f => `<option ${pm.timeframe === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Setup que estás viendo</label><select class="form-input" id="pm-setup">${(S.customSetups && S.customSetups.length ? S.customSetups : SETUPS).map(s => `<option ${pm.setup === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Checklist de confirmación</label><div style="background:var(--bg2);padding:12px;border-radius:var(--radius);border:1px solid var(--border)">${checks || '<div style="font-size:12px;color:var(--text3)">No hay checks activos</div>'}</div></div>
+      <div class="form-group"><label class="form-label">Nota adicional</label><textarea class="form-input" id="pm-notes" placeholder="Soportes, resistencias, eventos macro...">${pm.notes || ''}</textarea></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeModal('pm-modal')">Cancelar</button>
+        <button class="btn btn-primary" id="pm-btn-save" onclick="submitPremarket()"><i class="ti ti-check"></i> Evaluar y Guardar</button>
+      </div>
+    </div>
+    <div id="pm-result" style="display:none;text-align:center;padding:20px 0">
+      <!-- Aqui va el semáforo -->
     </div>
   </div>`;
       document.body.appendChild(m);
     }
 
     async function submitPremarket() {
+      const btn = document.getElementById('pm-btn-save');
+      btn.innerHTML = '<div class="spinner"></div> Evaluando...';
+      btn.disabled = true;
+
       const today = new Date().toISOString().split('T')[0];
-      const pm = { entry_date: today, bias: document.getElementById('pm-bias').value, sessions: document.getElementById('pm-sessions').value, max_risk: document.getElementById('pm-risk').value, notes: document.getElementById('pm-notes').value };
-      await savePremarket(pm); closeModal('pm-modal'); showToast('Pre-market guardado', 'success');
-      if (S.currentPage === 'diario') renderDiario();
-      if (S.currentPage === 'dashboard') renderDashboard();
+      const chks = {};
+      document.querySelectorAll('.pm-chk').forEach(c => chks[c.dataset.id] = c.checked);
+
+      const pm = { 
+        entry_date: today, 
+        par: document.getElementById('pm-par').value, 
+        direccion: document.getElementById('pm-dir').value, 
+        sesion: document.getElementById('pm-sesion').value, 
+        timeframe: document.getElementById('pm-tf').value,
+        setup: document.getElementById('pm-setup').value,
+        checklist_results: chks,
+        notes: document.getElementById('pm-notes').value 
+      };
+
+      // Query AI
+      const checkedLabels = S.checklist.filter(c => c.active && chks[c.id]).map(c => c.label).join(', ');
+      const uncheckedLabels = S.checklist.filter(c => c.active && !chks[c.id]).map(c => c.label).join(', ');
+
+      const prompt = `Analiza el siguiente escenario de pre-market para un trader:
+Par: ${pm.par} | Dirección: ${pm.direccion} | Sesión: ${pm.sesion} | TF: ${pm.timeframe} | Setup: ${pm.setup}
+Confirmaciones tenidas en cuenta: ${checkedLabels || 'Ninguna'}
+Confirmaciones que faltan: ${uncheckedLabels || 'Ninguna'}
+Notas del trader: ${pm.notes || 'Sin notas'}
+
+Devuelve un objeto JSON con 3 campos exactamente:
+- "semaforo": "VERDE", "AMARILLO" o "ROJO" dependiendo de la solidez de la entrada (ten muy en cuenta cuántas confirmaciones faltan vs las que tiene).
+- "explicacion": 2 o 3 frases breves analizando por qué le das ese color.
+- "faltan": Un string corto indicando los puntos débiles o lo que falta confirmar antes de entrar. Si no falta nada, di "Todo listo".`;
+
+      try {
+        const aiRes = await callGeminiAPI(prompt, true);
+        const ans = JSON.parse(aiRes);
+        pm.ai_analysis = ans;
+        await savePremarket(pm);
+        
+        // Show result
+        document.getElementById('pm-form').style.display = 'none';
+        const resDiv = document.getElementById('pm-result');
+        const color = ans.semaforo === 'VERDE' ? 'var(--green)' : ans.semaforo === 'AMARILLO' ? 'var(--amber)' : 'var(--red)';
+        resDiv.style.display = 'block';
+        resDiv.innerHTML = `
+          <div style="width:80px;height:80px;border-radius:50%;background:${color};box-shadow:0 0 30px ${color};margin:0 auto 20px auto;border:4px solid var(--bg3)"></div>
+          <h2 style="color:${color};margin-bottom:10px;font-size:24px;letter-spacing:-0.02em">${ans.semaforo}</h2>
+          <p style="color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:16px">${ans.explicacion}</p>
+          <div style="background:var(--bg2);padding:12px;border-radius:var(--radius);border:1px solid var(--border);text-align:left;margin-bottom:20px">
+            <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Puntos a tener en cuenta</div>
+            <div style="font-size:13px;color:var(--text)">${ans.faltan}</div>
+          </div>
+          <button class="btn btn-primary" style="width:100%" onclick="closeModal('pm-modal'); if (S.currentPage === 'diario') renderDiario(); if (S.currentPage === 'dashboard') renderDashboard();">Entendido</button>
+        `;
+      } catch (e) {
+        console.error(e);
+        showToast('Error en la IA: ' + (e.message || 'Desconocido'), 'error');
+        await savePremarket(pm);
+        closeModal('pm-modal');
+        if (S.currentPage === 'diario') renderDiario();
+        if (S.currentPage === 'dashboard') renderDashboard();
+      }
     }
 
     // ── OBJETIVOS ────────────────────────────────────────
@@ -1994,6 +2114,51 @@
 
     // ── UTILS ────────────────────────────────────────────
     function closeModal(id) { const m = document.getElementById(id); if (m) m.remove(); }
+
+    async function callGeminiAPI(prompt, isJson = false) {
+      if (!S.apiKey) throw new Error('API Key no configurada');
+      const body = {
+        contents: [{ parts: [{ text: prompt }] }],
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
+      };
+      if (isJson) {
+        body.generationConfig = { responseMimeType: "application/json" };
+      }
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${S.apiKey}`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(body) 
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      
+      if (!data.candidates || data.candidates.length === 0) {
+        throw new Error('La IA no devolvió respuesta');
+      }
+      
+      const candidate = data.candidates[0];
+      if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+        const reason = candidate.finishReason || 'Desconocida';
+        throw new Error('La IA bloqueó la respuesta (Razón: ' + reason + ')');
+      }
+      
+      let text = candidate.content.parts[0].text || '';
+      if (isJson) {
+        text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        // Si la IA añade texto antes o después del JSON, forzar extraer solo lo que esté entre { y }
+        const startIdx = text.indexOf('{');
+        const endIdx = text.lastIndexOf('}');
+        if (startIdx !== -1 && endIdx !== -1) {
+          text = text.substring(startIdx, endIdx + 1);
+        }
+      }
+      return text;
+    }
     function openLightbox(url) {
       const m = document.createElement('div');
       m.className = 'modal-overlay';
