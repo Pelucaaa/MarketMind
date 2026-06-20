@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MarketMind</title>
+  <title>MarketMind — Trading Journal</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -823,7 +823,7 @@
           const prompt = `Coach trading profesional. Analiza este trade de forma justa y equilibrada. Valora positivamente el resultado si fue ganador (R > 0) y sé menos severo con las emociones. SOLO JSON sin markdown.\nTrade: Par=${trade.pair},Dir=${trade.direction},R=${trade.result},Setup=${trade.setup},Sesión=${trade.session},TF=${trade.timeframe},Emoción=${trade.emotion}/10,Confianza=${trade.confidence}/10,Estrés=${trade.stress}/10,Checklist=${pct}%,Duración=${trade.duration_minutes || '?'}min,Notas="${trade.notes || 'ninguna'}"\nJSON español: {"score":0-100,"lo_que_hiciste_bien":["p1","p2"],"lo_que_hiciste_mal":["p1","p2"],"errores_detectados":[],"recomendacion":"frase","resumen":"2-3 frases"}`;
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 12000);
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${S.apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }), signal: controller.signal });
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${S.apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }), signal: controller.signal });
           clearTimeout(timeoutId);
           const d = await res.json(); ai = JSON.parse(d.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim());
         }
@@ -1231,7 +1231,7 @@
         if (!S.apiKey) { plan = buildLocalPlan(s, topErr); }
         else {
           const prompt = `Coach trading prop firm. Plan semanal JSON sin markdown.\nDatos: WR=${s.wr}%,RR=${s.rr}R,PnL=${s.pnl}R,Trades=${s.count},MejorSetup="${s.bestSetup}",MejorSesión="${s.bestSession}",Errores=${topErr.join(',') || 'ninguno'}\nJSON español: {"resumen":"texto","fortalezas":["p1","p2","p3"],"debilidades":["p1","p2","p3"],"reglas":["r1","r2","r3","r4"],"setups_permitidos":["s1","s2"],"comportamientos_prohibidos":["c1","c2","c3"],"riesgo_max_diario":"XR","drawdown_max_semanal":"XR","objetivo_semanal":"XR","mensaje_motivacional":"frase"}`;
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${S.apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${S.apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
           const d = await res.json(); plan = JSON.parse(d.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim());
         }
       } catch (e) { plan = buildLocalPlan(s, topErr); }
@@ -1471,9 +1471,10 @@
       <div class="card-header"><span class="card-title">☀️ Pre-market hoy</span>${hasPM ? '<span class="tag tag-green">Completado</span>' : ''}</div>
       ${hasPM ? `
       <div style="font-size:13px;color:var(--text2);line-height:1.7">
-        <div style="margin-bottom:6px"><span style="color:var(--text3)">Bias:</span> ${S.premarket.bias || '—'}</div>
-        <div style="margin-bottom:6px"><span style="color:var(--text3)">Sesiones:</span> ${S.premarket.sessions || '—'}</div>
-        <div style="margin-bottom:6px"><span style="color:var(--text3)">Riesgo máx:</span> ${S.premarket.max_risk || '—'}</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text3)">Par:</span> ${S.premarket.par || '—'}</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text3)">Dirección:</span> ${S.premarket.direccion || '—'}</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text3)">Sesión:</span> ${S.premarket.sesion || '—'}</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text3)">Setup:</span> ${S.premarket.setup || '—'}</div>
         <div style="margin-bottom:6px"><span style="color:var(--text3)">Notas:</span> ${S.premarket.notes || '—'}</div>
       </div>
       <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="openPremarket()"><i class="ti ti-edit"></i> Editar</button>`: `
@@ -2120,7 +2121,7 @@ Devuelve un objeto JSON con 3 campos exactamente:
       const body = {
         contents: [{ parts: [{ text: prompt }] }]
       };
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${S.apiKey}`, { 
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${S.apiKey}`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify(body) 
