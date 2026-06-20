@@ -128,7 +128,8 @@
       apiKey: '', equityChart: null, currentPage: 'dashboard',
       habits: [], habitLogs: {}, diaryEntries: [], monthlyGoal: null,
       premarket: {}, setupChart: null, periodChart: null,
-      apuntes: [], psicoTab: 'objetivos', cuadernoTab: 'plan'
+      apuntes: [], customPairs: null, customSetups: null, customSessions: null, customTimeframes: null,
+      psicoTab: 'objetivos', cuadernoTab: 'plan'
     };
 
 
@@ -219,14 +220,15 @@
       const pGoal = sb.from('monthly_goals').select('*').eq('user_id', S.user.id).eq('month', month).maybeSingle();
       const pPremarket = sb.from('premarket').select('*').eq('user_id', S.user.id).eq('entry_date', today).maybeSingle();
       const pApuntes = sb.from('apuntes').select('*').eq('user_id', S.user.id).order('created_at', { ascending: false });
+      const pUserCfg = sb.from('user_config').select('*').eq('user_id', S.user.id).maybeSingle();
 
       try {
         const results = await Promise.race([
-          Promise.allSettled([pTrades, pCfg, pPlans, pHabits, pLogs, pDiary, pGoal, pPremarket, pApuntes]),
+          Promise.allSettled([pTrades, pCfg, pPlans, pHabits, pLogs, pDiary, pGoal, pPremarket, pApuntes, pUserCfg]),
           new Promise((_, r) => setTimeout(() => r(new Error('Timeout_Load')), 15000))
         ]);
 
-        const [rTrades, rCfg, rPlans, rHabits, rLogs, rDiary, rGoal, rPremarket, rApuntes] = results;
+        const [rTrades, rCfg, rPlans, rHabits, rLogs, rDiary, rGoal, rPremarket, rApuntes, rUserCfg] = results;
 
         if (rTrades.status === 'fulfilled' && !rTrades.value.error) {
           S.trades = (rTrades.value.data || []).map(t => ({ ...t, result: parseFloat(t.result), checklist: t.checklist || {}, errors: t.errors || [], feedback: t.feedback || null, screenshot_url: t.screenshot_url || null }));
@@ -248,6 +250,12 @@
         if (rGoal.status === 'fulfilled' && rGoal.value.data) S.monthlyGoal = rGoal.value.data; else S.monthlyGoal = null;
         if (rPremarket.status === 'fulfilled' && rPremarket.value.data) S.premarket = rPremarket.value.data; else S.premarket = {};
         if (rApuntes.status === 'fulfilled' && rApuntes.value.data) S.apuntes = rApuntes.value.data; else S.apuntes = [];
+        if (rUserCfg && rUserCfg.status === 'fulfilled' && rUserCfg.value.data) {
+          S.customPairs = rUserCfg.value.data.custom_pairs;
+          S.customSetups = rUserCfg.value.data.custom_setups;
+          S.customSessions = rUserCfg.value.data.custom_sessions;
+          S.customTimeframes = rUserCfg.value.data.custom_timeframes;
+        }
 
         try {
           const toCache = {
@@ -322,6 +330,7 @@
     async function updateTradeAI(id, score, errors, feedback) { try { await sb.from('trades').update({ score, errors, feedback }).eq('id', id).eq('user_id', S.user.id); } catch (e) { } }
     async function deleteTrade(id) { await sb.from('trades').delete().eq('id', id).eq('user_id', S.user.id); }
     async function saveChecklistCfg() { try { await sb.from('checklist_config').upsert({ user_id: S.user.id, items: S.checklist }, { onConflict: 'user_id' }); } catch (e) { } }
+    async function saveUserCfg() { try { await sb.from('user_config').upsert({ user_id: S.user.id, custom_pairs: S.customPairs, custom_setups: S.customSetups, custom_sessions: S.customSessions, custom_timeframes: S.customTimeframes }, { onConflict: 'user_id' }); } catch (e) { } }
     async function saveWeeklyPlan(plan) { const today = new Date().toISOString().split('T')[0]; try { await sb.from('weekly_plans').insert({ user_id: S.user.id, week_start: today, plan }); } catch (e) { } }
     async function uploadScreenshot(file) {
       if (!file) return null;
@@ -563,23 +572,59 @@
           </div>
         </div>
 
-        <div class="card" style="margin-top:14px">
-           <div class="card-header"><span class="card-title">Objetivos, Hábitos y Diario</span></div>
-           <p style="color:var(--text3);font-size:13px;line-height:1.6">
-             MarketMind no es solo un registro numérico, es un diario de alto rendimiento. En la pestaña <strong>Objetivos</strong> puedes definir tu meta mensual en R, controlar tus <strong>Hábitos</strong> diarios (meditar, backtesting, ejercicio…) y llevar un <strong>Diario Personal</strong> con pre-market y notas emocionales. El trading es 80% psicología; cuida tu mente y tus números mejorarán solos.
-           </p>
+        <div class="grid-2" style="margin-top:14px">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Análisis Avanzado</span></div>
+            <p style="color:var(--text3);font-size:13px;line-height:1.6;margin-bottom:10px">
+              En la pestaña <strong>Análisis</strong>, MarketMind desglosa tu rendimiento para que encuentres tu ventaja estadística:
+            </p>
+            <ul style="color:var(--text);font-size:13px;line-height:1.6;padding-left:16px">
+              <li><strong>Comparativa por Periodos:</strong> Analiza cómo evolucionan tus resultados y enfrenta dos periodos específicos.</li>
+              <li><strong>Setups y Sesiones:</strong> Descubre qué estrategia te da más dinero y en qué sesión rindes mejor.</li>
+              <li><strong>Patrones IA y Emociones:</strong> Correlaciona emociones con ganancias y recibe alertas de patrones nocivos (ej. Revenge Trading).</li>
+            </ul>
+          </div>
+
+          <div class="card">
+             <div class="card-header"><span class="card-title">Objetivos, Hábitos y Diario</span></div>
+             <p style="color:var(--text3);font-size:13px;line-height:1.6;margin-bottom:10px">
+               El trading es 80% psicología. En <strong>Psicología</strong> encontrarás:
+             </p>
+             <ul style="color:var(--text);font-size:13px;line-height:1.6;padding-left:16px">
+               <li><strong>Objetivos:</strong> Define tu meta mensual en R y monitorea tu progreso.</li>
+               <li><strong>Hábitos:</strong> Controla tu rutina (meditar, backtesting) y mantén tu disciplina diaria.</li>
+               <li><strong>Diario Personal:</strong> Registra tu pre-market y notas emocionales para vaciar tu mente.</li>
+             </ul>
+          </div>
         </div>
 
-        <div class="card" style="margin-top:14px">
-           <div class="card-header"><span class="card-title">Cuaderno y Apuntes</span></div>
-           <p style="color:var(--text3);font-size:13px;line-height:1.6">
-             En la sección <strong>Cuaderno</strong> encontrarás tu <strong>Plan Semanal</strong> (generado con IA a partir de tus trades recientes) y los <strong>Apuntes de Patrones</strong>, tu biblioteca personal para guardar capturas de gráficos, estructuras de mercado y notas que vayas descubriendo en tu operativa diaria.
-           </p>
+        <div class="grid-2" style="margin-top:14px">
+          <div class="card">
+             <div class="card-header"><span class="card-title">Cuaderno y Apuntes</span></div>
+             <p style="color:var(--text3);font-size:13px;line-height:1.6;margin-bottom:10px">
+               Tu área de estudio personal:
+             </p>
+             <ul style="color:var(--text);font-size:13px;line-height:1.6;padding-left:16px">
+               <li><strong>Plan Semanal:</strong> Resumen generado con IA para preparar tu próxima semana con focos claros.</li>
+               <li><strong>Apuntes de Patrones:</strong> Guarda capturas de gráficos y descubrimientos diarios en tu biblioteca visual.</li>
+             </ul>
+          </div>
+
+          <div class="card">
+             <div class="card-header"><span class="card-title">Configuración y Checklist</span></div>
+             <p style="color:var(--text3);font-size:13px;line-height:1.6;margin-bottom:10px">
+               MarketMind se adapta a ti. En <strong>Configuración</strong> puedes:
+             </p>
+             <ul style="color:var(--text);font-size:13px;line-height:1.6;padding-left:16px">
+               <li><strong>Checklist Personalizada:</strong> Define las reglas exactas de tu plan. Se usarán para evaluar la disciplina de tus trades.</li>
+               <li><strong>Gestión de Datos:</strong> Ajusta tu riesgo, activa el modo oscuro o exporta/importa tu historial en CSV.</li>
+             </ul>
+          </div>
         </div>
 
         <div style="margin-top:50px;margin-bottom:20px;text-align:center;padding:30px;background:linear-gradient(to right, transparent, rgba(167,139,250,0.06), transparent);border-radius:12px;border-top:1px solid rgba(167,139,250,0.1);border-bottom:1px solid rgba(167,139,250,0.1)">
           <div style="font-family:'Geist Mono', monospace; font-size: 28px; font-weight: 800; color: var(--lila); letter-spacing: 6px; text-transform: uppercase; text-shadow: 0 0 25px rgba(167,139,250,0.6);">
-            Desarrollado by ZAFIRO
+            Desarrollado por ZAFIRO
           </div>
         </div>
       `;
@@ -714,7 +759,7 @@
       m.innerHTML = `<div class="modal">
     <div class="modal-title"><i class="ti ti-${editId ? 'edit' : 'plus'}" style="color:var(--lila)"></i> ${editId ? 'Editar' : 'Registrar'} Trade</div>
     <div class="grid-2">
-      <div class="form-group"><label class="form-label">Par</label><select class="form-input" id="t-pair">${PAIRS.map(p => `<option ${t && t.pair === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Par</label><select class="form-input" id="t-pair">${(S.customPairs && S.customPairs.length ? S.customPairs : PAIRS).map(p => `<option ${t && t.pair === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Dirección</label><select class="form-input" id="t-dir"><option ${t && t.direction === 'Compra' ? 'selected' : ''}>Compra</option><option ${t && t.direction === 'Venta' ? 'selected' : ''}>Venta</option></select></div>
     </div>
     <div class="grid-2">
@@ -722,10 +767,10 @@
       <div class="form-group"><label class="form-label">Duración (minutos)</label><input type="number" class="form-input" id="t-duration" placeholder="ej: 45" value="${t && t.duration_minutes ? t.duration_minutes : ''}"></div>
     </div>
     <div class="grid-2">
-      <div class="form-group"><label class="form-label">Sesión</label><select class="form-input" id="t-session">${SESSIONS.map(s => `<option ${t && t.session === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Timeframe</label><select class="form-input" id="t-tf">${TIMEFRAMES.map(f => `<option ${t && t.timeframe === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Sesión</label><select class="form-input" id="t-session">${(S.customSessions && S.customSessions.length ? S.customSessions : SESSIONS).map(s => `<option ${t && t.session === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Timeframe</label><select class="form-input" id="t-tf">${(S.customTimeframes && S.customTimeframes.length ? S.customTimeframes : TIMEFRAMES).map(f => `<option ${t && t.timeframe === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div>
     </div>
-    <div class="form-group"><label class="form-label">Setup</label><select class="form-input" id="t-setup">${SETUPS.map(s => `<option ${t && t.setup === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Setup</label><select class="form-input" id="t-setup">${(S.customSetups && S.customSetups.length ? S.customSetups : SETUPS).map(s => `<option ${t && t.setup === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
     <div class="form-group">
       <label class="form-label">Estado emocional · 1 = muy malo · 10 = excelente</label>
       <div class="emotion-track">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `<button class="emotion-btn ${i === selectedEmotion ? 'selected' : ''}" data-v="${i}" onclick="selectEmotion(${i})">${i}</button>`).join('')}</div>
@@ -1777,8 +1822,105 @@
       <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Aparece al registrar cada trade.</p>
       <div id="cl-config">${renderCLConfig()}</div>
     </div>
+
+    <div class="card" style="margin-top:14px; grid-column: 1 / -1;">
+      <div class="card-header"><span class="card-title">Personalizar formulario de trades</span></div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:14px">Define tus propios pares, setups, sesiones y timeframes.</p>
+      <div class="grid-2">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+            <label class="form-label" style="margin:0">PARES</label>
+            <button class="btn btn-ghost btn-sm" onclick="addCustomItem('customPairs')"><i class="ti ti-plus"></i> Añadir</button>
+          </div>
+          <div id="cfg-pairs">${renderCustomList('customPairs', PAIRS)}</div>
+        </div>
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+            <label class="form-label" style="margin:0">SETUPS</label>
+            <button class="btn btn-ghost btn-sm" onclick="addCustomItem('customSetups')"><i class="ti ti-plus"></i> Añadir</button>
+          </div>
+          <div id="cfg-setups">${renderCustomList('customSetups', SETUPS)}</div>
+        </div>
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+            <label class="form-label" style="margin:0">SESIONES</label>
+            <button class="btn btn-ghost btn-sm" onclick="addCustomItem('customSessions')"><i class="ti ti-plus"></i> Añadir</button>
+          </div>
+          <div id="cfg-sessions">${renderCustomList('customSessions', SESSIONS)}</div>
+        </div>
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+            <label class="form-label" style="margin:0">TIMEFRAMES</label>
+            <button class="btn btn-ghost btn-sm" onclick="addCustomItem('customTimeframes')"><i class="ti ti-plus"></i> Añadir</button>
+          </div>
+          <div id="cfg-tf">${renderCustomList('customTimeframes', TIMEFRAMES)}</div>
+        </div>
+      </div>
+    </div>
   </div>`;
     }
+
+    function renderCustomList(key, defaultList) {
+      const list = S[key] && S[key].length ? S[key] : [...defaultList];
+      return list.map((item, idx) => `
+        <div class="check-item" draggable="true" ondragstart="handleDragStart(event, '${key}', ${idx})" ondragover="event.preventDefault()" ondrop="handleDrop(event, '${key}', ${idx})" ondragend="handleDragEnd(event)">
+          <span style="cursor:grab;color:var(--text3);font-size:14px;margin-right:6px;user-select:none;display:flex;align-items:center">⠿</span>
+          <input type="text" value="${item}" onchange="updateCustomItem('${key}', ${idx}, this.value)" style="flex:1;background:transparent;border:none;color:var(--text);font-family:'Geist','Inter',sans-serif;font-size:13px;outline:none">
+          <button onclick="removeCustomItem('${key}', ${idx})" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 4px;font-size:13px"><i class="ti ti-x"></i></button>
+        </div>
+      `).join('');
+    }
+
+    let dragSrcIdx = null;
+    let dragSrcKey = null;
+
+    function handleDragStart(e, key, idx) {
+      dragSrcIdx = idx;
+      dragSrcKey = key;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', idx);
+      e.target.style.opacity = '0.4';
+    }
+
+    function handleDragEnd(e) {
+      e.target.style.opacity = '1';
+    }
+
+    async function handleDrop(e, key, idx) {
+      e.preventDefault();
+      if (dragSrcKey !== key || dragSrcIdx === idx) return;
+      if (!S[key] || !S[key].length) {
+         const defs = key === 'customPairs' ? PAIRS : key === 'customSetups' ? SETUPS : key === 'customSessions' ? SESSIONS : TIMEFRAMES;
+         S[key] = [...defs];
+      }
+      const item = S[key].splice(dragSrcIdx, 1)[0];
+      S[key].splice(idx, 0, item);
+      await saveUserCfg();
+      showPage('config');
+    }
+
+    async function addCustomItem(key) {
+      if (!S[key] || !S[key].length) S[key] = [...(key === 'customPairs' ? PAIRS : key === 'customSetups' ? SETUPS : key === 'customSessions' ? SESSIONS : TIMEFRAMES)];
+      const defaultText = key === 'customPairs' ? 'Nuevo par' : key === 'customSetups' ? 'Nuevo setup' : key === 'customSessions' ? 'Nueva sesión' : 'Nuevo timeframe';
+      S[key].push(defaultText);
+      await saveUserCfg();
+      showPage('config');
+    }
+
+    async function removeCustomItem(key, idx) {
+      if (!S[key] || !S[key].length) S[key] = [...(key === 'customPairs' ? PAIRS : key === 'customSetups' ? SETUPS : key === 'customSessions' ? SESSIONS : TIMEFRAMES)];
+      S[key].splice(idx, 1);
+      await saveUserCfg();
+      showPage('config');
+    }
+
+    async function updateCustomItem(key, idx, val) {
+      if (!val.trim()) return;
+      if (!S[key] || !S[key].length) S[key] = [...(key === 'customPairs' ? PAIRS : key === 'customSetups' ? SETUPS : key === 'customSessions' ? SESSIONS : TIMEFRAMES)];
+      S[key][idx] = val.trim();
+      await saveUserCfg();
+    }
+
     function renderCLConfig() { return S.checklist.map(c => `<div class="check-item"><div class="check-box ${c.active ? 'checked' : ''}" onclick="toggleCLItem(${c.id})">${c.active ? '<i class="ti ti-check" style="font-size:11px;color:#fff"></i>' : ''}</div><input type="text" value="${c.label}" onchange="updateCLLabel(${c.id},this.value)" style="flex:1;background:transparent;border:none;color:var(--text);font-family:'Geist','Inter',sans-serif;font-size:13px;outline:none"><button onclick="removeCLItem(${c.id})" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 4px;font-size:13px"><i class="ti ti-x"></i></button></div>`).join(''); }
     async function toggleCLItem(id) { const c = S.checklist.find(x => x.id === id); if (c) c.active = !c.active; await saveChecklistCfg(); document.getElementById('cl-config').innerHTML = renderCLConfig(); }
     async function updateCLLabel(id, val) { const c = S.checklist.find(x => x.id === id); if (c) c.label = val; await saveChecklistCfg(); }
