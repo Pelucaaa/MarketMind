@@ -299,3 +299,44 @@ canvas{width:100%!important}
 .inline-input-group button:hover {
   opacity: 0.9;
 }
+
+/* ── Config Page ── */
+.config-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  font-family: 'Geist', 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.config-nav-item:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+.config-nav-item.active {
+  color: var(--lila);
+  background: var(--lila-dim);
+}
+.config-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--lila);
+}
+.config-nav-item i {
+  font-size: 16px;
+  opacity: 0.8;
+}
