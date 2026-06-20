@@ -2118,13 +2118,7 @@ Devuelve un objeto JSON con 3 campos exactamente:
     async function callGeminiAPI(prompt, isJson = false) {
       if (!S.apiKey) throw new Error('API Key no configurada');
       const body = {
-        contents: [{ parts: [{ text: prompt }] }],
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
-        ]
+        contents: [{ parts: [{ text: prompt }] }]
       };
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${S.apiKey}`, { 
         method: 'POST', 
