@@ -258,3 +258,44 @@ canvas{width:100%!important}
   visibility: visible;
   transform: translateX(-50%) translateY(-4px);
 }
+
+/* ── Inline Input Group ── */
+.inline-input-group {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  overflow: hidden;
+}
+.inline-input-group:focus-within {
+  border-color: var(--lila);
+  box-shadow: 0 0 0 3px var(--lila-dim);
+}
+.inline-input-group input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 8px 11px;
+  font-family: 'Geist', 'Inter', sans-serif;
+  font-size: 13px;
+  outline: none;
+}
+.inline-input-group button {
+  background: var(--lila);
+  color: #fff;
+  border: none;
+  border-left: 1px solid rgba(255,255,255,0.2);
+  padding: 0 14px;
+  font-family: 'Geist', 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.inline-input-group button:hover {
+  opacity: 0.9;
+}
