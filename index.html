@@ -2302,8 +2302,8 @@ Devuelve un objeto JSON con 3 campos exactamente:
 
         <div class="form-group">
           <label class="form-label">Estado emocional del día (1-10)</label>
-          <div class="scale-selector" id="nt-mood-scale">
-            ${[1,2,3,4,5,6,7,8,9,10].map(i => `<div class="scale-btn" onclick="selectNtMood(${i})">${i}</div>`).join('')}
+          <div class="emotion-track" id="nt-mood-scale">
+            ${[1,2,3,4,5,6,7,8,9,10].map(i => `<button class="emotion-btn" data-v="${i}" onclick="selectNtMood(${i})">${i}</button>`).join('')}
           </div>
           <input type="hidden" id="nt-mood" value="">
         </div>
@@ -2318,10 +2318,8 @@ Devuelve un objeto JSON con 3 campos exactamente:
 
     function selectNtMood(val) {
       document.getElementById('nt-mood').value = val;
-      const btns = document.querySelectorAll('#nt-mood-scale .scale-btn');
-      btns.forEach(b => {
-        b.classList.remove('selected');
-        if (parseInt(b.textContent) === val) b.classList.add('selected');
+      document.querySelectorAll('#nt-mood-scale .emotion-btn').forEach(b => {
+        b.classList.toggle('selected', parseInt(b.dataset.v) === val);
       });
     }
 
