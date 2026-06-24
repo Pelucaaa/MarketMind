@@ -103,6 +103,28 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
   <script>
+    /* 
+    SQL necesario para Supabase:
+    create table no_trade_days (
+      id bigint generated always as identity primary key,
+      user_id uuid references auth.users(id) 
+        on delete cascade not null,
+      trade_date date not null,
+      reason text not null,
+      saw_opportunity boolean default false,
+      opportunity_description text,
+      notes text,
+      mood int,
+      ai_feedback text,
+      ai_score text,
+      created_at timestamptz default now(),
+      unique(user_id, trade_date)
+    );
+    alter table no_trade_days enable row level security;
+    create policy "notrade_all" on no_trade_days 
+      for all using (auth.uid() = user_id) 
+      with check (auth.uid() = user_id);
+    */
     const SUPABASE_URL = 'https://vkjirtcqyexoyrpiflgu.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_92rFDjEPcxw9CfMRMJWN6A_qNUdfAdJ';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -129,7 +151,7 @@
       habits: [], habitLogs: {}, diaryEntries: [], monthlyGoal: null,
       premarket: {}, setupChart: null, periodChart: null,
       apuntes: [], customPairs: null, customSetups: null, customSessions: null, customTimeframes: null,
-      psicoTab: 'objetivos', cuadernoTab: 'plan'
+      psicoTab: 'objetivos', cuadernoTab: 'plan', noTradeDays: []
     };
 
 
@@ -220,14 +242,15 @@
       const pGoal = sb.from('monthly_goals').select('*').eq('user_id', S.user.id).eq('month', month).maybeSingle();
       const pPremarket = sb.from('premarket').select('*').eq('user_id', S.user.id).eq('entry_date', today).maybeSingle();
       const pApuntes = sb.from('apuntes').select('*').eq('user_id', S.user.id).order('created_at', { ascending: false });
+      const pNoTrade = sb.from('no_trade_days').select('*').eq('user_id', S.user.id).gte('trade_date', from90).order('trade_date', { ascending: false });
 
       try {
         const results = await Promise.race([
-          Promise.allSettled([pTrades, pCfg, pPlans, pHabits, pLogs, pDiary, pGoal, pPremarket, pApuntes]),
+          Promise.allSettled([pTrades, pCfg, pPlans, pHabits, pLogs, pDiary, pGoal, pPremarket, pApuntes, pNoTrade]),
           new Promise((_, r) => setTimeout(() => r(new Error('Timeout_Load')), 15000))
         ]);
 
-        const [rTrades, rCfg, rPlans, rHabits, rLogs, rDiary, rGoal, rPremarket, rApuntes] = results;
+        const [rTrades, rCfg, rPlans, rHabits, rLogs, rDiary, rGoal, rPremarket, rApuntes, rNoTrade] = results;
 
         if (rTrades.status === 'fulfilled' && !rTrades.value.error) {
           S.trades = (rTrades.value.data || []).map(t => ({ ...t, result: parseFloat(t.result), checklist: t.checklist || {}, errors: t.errors || [], feedback: t.feedback || null, screenshot_url: t.screenshot_url || null }));
@@ -256,12 +279,14 @@
         if (rGoal.status === 'fulfilled' && rGoal.value.data) S.monthlyGoal = rGoal.value.data; else S.monthlyGoal = null;
         if (rPremarket.status === 'fulfilled' && rPremarket.value.data) S.premarket = rPremarket.value.data; else S.premarket = {};
         if (rApuntes.status === 'fulfilled' && rApuntes.value.data) S.apuntes = rApuntes.value.data; else S.apuntes = [];
+        if (rNoTrade.status === 'fulfilled' && rNoTrade.value.data) S.noTradeDays = rNoTrade.value.data; else S.noTradeDays = [];
 
         try {
           const toCache = {
             trades: S.trades, checklist: S.checklist, weeklyPlan: S.weeklyPlan,
             habits: S.habits, habitLogs: S.habitLogs, diaryEntries: S.diaryEntries,
             monthlyGoal: S.monthlyGoal, premarket: S.premarket, apuntes: S.apuntes,
+            noTradeDays: S.noTradeDays,
             currentPage: S.currentPage
           };
           localStorage.setItem(cacheKey, JSON.stringify(toCache));
@@ -458,9 +483,29 @@
       const sorted = [...t].sort((a, b) => a.created_at > b.created_at ? 1 : -1);
       let ds = 0;
       const dayMap = {};
-      sorted.forEach(x => { const d = x.created_at?.slice(0, 10); if (!d) return; const cc = Object.values(x.checklist || {}).filter(v => v).length; const tc = Object.values(x.checklist || {}).length; const pct = tc > 0 ? cc / tc : 0; if (!dayMap[d]) dayMap[d] = []; dayMap[d].push(pct); });
+      sorted.forEach(x => { const d = x.created_at?.slice(0, 10); if (!d) return; const cc = Object.values(x.checklist || {}).filter(v => v).length; const tc = Object.values(x.checklist || {}).length; const pct = tc > 0 ? cc / tc : 0; if (!dayMap[d]) dayMap[d] = { trades: [], notrade: null }; dayMap[d].trades.push(pct); });
+      if (S.noTradeDays) {
+        S.noTradeDays.forEach(nt => {
+          const d = nt.trade_date;
+          if (!dayMap[d]) dayMap[d] = { trades: [], notrade: null };
+          const isGood = (nt.reason === 'No dio entrada' || nt.reason === 'Checklist incompleta');
+          dayMap[d].notrade = isGood;
+        });
+      }
       const days = Object.keys(dayMap).sort().reverse();
-      for (let i = 0; i < days.length; i++) { const avg = dayMap[days[i]].reduce((a, b) => a + b, 0) / dayMap[days[i]].length; if (avg >= 0.8) ds++; else break; }
+      for (let i = 0; i < days.length; i++) { 
+        const { trades, notrade } = dayMap[days[i]];
+        let dayPass = false;
+        if (trades.length > 0) {
+          const avg = trades.reduce((a, b) => a + b, 0) / trades.length; 
+          if (avg >= 0.8) dayPass = true;
+        }
+        if (notrade === true) dayPass = true;
+        
+        if (dayPass) ds++;
+        else if (notrade === false && trades.length === 0) { /* Neutral: no suma ni resta */ }
+        else break;
+      }
       return { pnl: +total.toFixed(2), wr, rr, weekPnl: +weekPnl.toFixed(2), winStreak: ws, loseStreak: ls, bestSetup: bS, bestSession: bSe, count: t.length, maxDrawdown: +maxDD.toFixed(2), disciplineStreak: ds };
     }
 
@@ -618,12 +663,17 @@
       const goalPct = S.monthlyGoal ? Math.min(100, Math.round(monthPnl / S.monthlyGoal.target_r * 100)) : null;
       // Pre-market today
       const hasPM = S.premarket?.entry_date === today;
+      const hasNoTrade = S.noTradeDays && S.noTradeDays.some(nt => nt.trade_date === today);
 
       document.getElementById('main-content').innerHTML = `
   <div class="section-header">
     <div><h1>Inicio</h1><p class="page-sub">${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p></div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost btn-sm" onclick="openPremarket()"><i class="ti ti-sun"></i> Pre-market${hasPM ? ' ✓' : ''}</button>
+      ${hasNoTrade ? 
+        `<button class="btn btn-ghost btn-sm" style="color:var(--green)" onclick="showNoTradeDetail('${today}')"><i class="ti ti-shield"></i> No Trade ✓</button>` :
+        `<button class="btn btn-ghost btn-sm" onclick="openNoTrade()"><i class="ti ti-shield"></i> No Trade</button>`
+      }
       <button class="btn btn-primary" onclick="openAddTrade()"><i class="ti ti-plus"></i> Nuevo Trade</button>
     </div>
   </div>
@@ -1357,11 +1407,13 @@
         const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         const pct = S.habits.length ? getDayPct(date) : null;
         const isFuture = date > today; const isToday = date === today;
+        const hasNoTrade = S.noTradeDays && S.noTradeDays.some(nt => nt.trade_date === date);
         const bg = isFuture ? 'transparent' : pct === null ? 'var(--bg3)' : pct === 0 ? 'var(--red-dim)' : pct < 50 ? 'rgba(251,191,36,0.15)' : pct < 80 ? 'var(--lila-dim)' : 'var(--green-dim)';
         const textColor = isFuture ? 'var(--text3)' : pct === null ? 'var(--text3)' : pct === 0 ? 'var(--red)' : pct < 50 ? 'var(--amber)' : pct < 80 ? 'var(--lila)' : 'var(--green)';
-        cells += `<div onclick="${!isFuture ? `openDayDetail('${date}')` : 'return'}" style="aspect-ratio:1;border-radius:6px;background:${bg};display:flex;align-items:center;justify-content:center;cursor:${isFuture ? 'default' : 'pointer'};border:${isToday ? '1.5px solid var(--lila)' : '1.5px solid transparent'};transition:all 0.15s;flex-direction:column;gap:1px" title="${date}${pct !== null ? ' — ' + pct + '%' : ''}"
+        cells += `<div onclick="${!isFuture ? `openDayDetail('${date}')` : 'return'}" style="aspect-ratio:1;border-radius:6px;background:${bg};display:flex;align-items:center;justify-content:center;cursor:${isFuture ? 'default' : 'pointer'};border:${isToday ? '1.5px solid var(--lila)' : '1.5px solid transparent'};transition:all 0.15s;flex-direction:column;gap:1px" title="${date}${pct !== null ? ' — ' + pct + '%' : ''}${hasNoTrade ? ' — No Trade' : ''}"
       onmouseover="${!isFuture ? `this.style.borderColor='var(--border2)'` : ''}" onmouseout="${!isFuture ? `this.style.borderColor='${isToday ? 'var(--lila)' : 'transparent'}'` : ''}">
       <div style="font-size:11px;font-weight:${isToday ? '700' : '400'};color:${textColor}">${d}</div>
+      ${hasNoTrade ? `<div style="font-size:10px;color:var(--text3);margin-top:1px"><i class="ti ti-shield"></i></div>` : ''}
       ${pct !== null && !isFuture ? `<div style="font-size:9px;color:${textColor};font-family:'Geist Mono',monospace">${pct}%</div>` : ''}
     </div>`;
       }
@@ -2211,6 +2263,172 @@ Devuelve un objeto JSON con 3 campos exactamente:
       t.style.borderColor = type === 'success' ? 'var(--green)' : type === 'warn' ? 'var(--amber)' : 'var(--border2)';
       t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3500);
     }
+    // ── NO TRADE DAY ─────────────────────────────────────
+    function openNoTrade() {
+      const today = new Date().toISOString().split('T')[0];
+      const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'notrade-modal';
+      m.innerHTML = `<div class="modal" style="max-width:500px">
+        <div class="modal-title" style="margin-bottom:5px"><i class="ti ti-shield" style="color:var(--green)"></i> Registrar día sin operar</div>
+        <p style="color:var(--text3);font-size:13px;margin-bottom:20px">Tomar la decisión de no operar también es parte del proceso.</p>
+        
+        <div class="form-group">
+          <label class="form-label">Motivo principal <span style="color:var(--red)">*</span></label>
+          <select class="form-input" id="nt-reason">
+            <option value="">Selecciona un motivo...</option>
+            <option value="No dio entrada">No dio entrada — vi el mercado pero no cumplió mis criterios</option>
+            <option value="Checklist incompleta">Checklist incompleta — había oportunidad pero faltaban confirmaciones</option>
+            <option value="Condiciones de mercado malas">Condiciones de mercado malas — rango, sin liquidez, alta volatilidad sin estructura</option>
+            <option value="Límite diario alcanzado">Límite diario alcanzado — ya operé y paré según mi plan</option>
+            <option value="Evento macro">Evento macro — noticias o calendario económico</option>
+            <option value="Motivo personal">Motivo personal — cansancio, distracción, situación personal</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">¿Viste alguna oportunidad que decidiste no tomar?</label>
+          <div style="display:flex;gap:10px;margin-bottom:10px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="nt-saw" value="true" onchange="document.getElementById('nt-opp-wrap').style.display='block'"> Sí</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="nt-saw" value="false" onchange="document.getElementById('nt-opp-wrap').style.display='none'" checked> No</label>
+          </div>
+          <div id="nt-opp-wrap" style="display:none">
+            <textarea class="form-input" id="nt-opp" placeholder="Describe brevemente la oportunidad que dejaste pasar..."></textarea>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Nota libre (Opcional)</label>
+          <textarea class="form-input" id="nt-notes" placeholder="¿Cómo fue tu sesión de observación? ¿Qué aprendiste hoy sin operar?"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Estado emocional del día (1-10)</label>
+          <div class="scale-selector" id="nt-mood-scale">
+            ${[1,2,3,4,5,6,7,8,9,10].map(i => `<div class="scale-btn" onclick="selectNtMood(${i})">${i}</div>`).join('')}
+          </div>
+          <input type="hidden" id="nt-mood" value="">
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:24px">
+          <button class="btn btn-ghost" onclick="closeModal('notrade-modal')">Cancelar</button>
+          <button class="btn btn-primary" id="save-nt-btn" onclick="submitNoTrade()"><i class="ti ti-check"></i> Guardar y Analizar</button>
+        </div>
+      </div>`;
+      document.body.appendChild(m);
+    }
+
+    function selectNtMood(val) {
+      document.getElementById('nt-mood').value = val;
+      const btns = document.querySelectorAll('#nt-mood-scale .scale-btn');
+      btns.forEach(b => {
+        b.classList.remove('selected');
+        if (parseInt(b.textContent) === val) b.classList.add('selected');
+      });
+    }
+
+    async function submitNoTrade() {
+      const reasonSelect = document.getElementById('nt-reason');
+      const reasonVal = reasonSelect.value;
+      if (!reasonVal) { showToast('Selecciona un motivo', 'warn'); return; }
+      
+      const saw_opportunity = document.querySelector('input[name="nt-saw"]:checked').value === 'true';
+      const opportunity_description = saw_opportunity ? document.getElementById('nt-opp').value : null;
+      const notes = document.getElementById('nt-notes').value;
+      const mood = document.getElementById('nt-mood').value ? parseInt(document.getElementById('nt-mood').value) : null;
+      const today = new Date().toISOString().split('T')[0];
+
+      const btn = document.getElementById('save-nt-btn');
+      btn.innerHTML = '<div class="spinner"></div> Analizando...';
+      btn.disabled = true;
+
+      let ai_score = 'Neutral';
+      let ai_feedback = '';
+      if (S.apiKey) {
+        try {
+          const prompt = `Un trader ha decidido NO operar hoy. Analiza su decisión como coach de trading profesional.
+Motivo: ${reasonVal}
+¿Vio oportunidad y la dejó pasar?: ${saw_opportunity ? 'Sí' : 'No'}
+${saw_opportunity ? 'Oportunidad: ' + opportunity_description : ''}
+Notas del trader: ${notes || 'Ninguna'}
+Estado emocional (1-10): ${mood || 'No especificado'}
+
+Devuelve un JSON estrictamente con este formato:
+{
+  "valoracion": "Excelente" o "Buena" o "Neutral",
+  "feedback": "Párrafo corto de 2-3 frases de feedback personalizado elogiando la disciplina o dando un consejo según el motivo."
+}`;
+          const aiRes = await callGeminiAPI(prompt, true);
+          const ans = JSON.parse(aiRes);
+          ai_score = ans.valoracion || 'Neutral';
+          ai_feedback = ans.feedback || 'Sin feedback.';
+        } catch(e) {
+          const local = localNoTradeAI(reasonVal);
+          ai_score = local.score; ai_feedback = local.feedback;
+        }
+      } else {
+        const local = localNoTradeAI(reasonVal);
+        ai_score = local.score; ai_feedback = local.feedback;
+      }
+
+      const row = {
+        user_id: S.user.id,
+        trade_date: today,
+        reason: reasonVal,
+        saw_opportunity,
+        opportunity_description,
+        notes,
+        mood,
+        ai_feedback,
+        ai_score
+      };
+
+      try {
+        const { data, error } = await sb.from('no_trade_days').upsert(row, { onConflict: 'user_id,trade_date' }).select().single();
+        if (error) throw error;
+        
+        if (!S.noTradeDays) S.noTradeDays = [];
+        const idx = S.noTradeDays.findIndex(nt => nt.trade_date === today);
+        if (idx !== -1) S.noTradeDays[idx] = data; else S.noTradeDays.push(data);
+
+        closeModal('notrade-modal');
+        showNoTradeResult(data);
+        if (S.currentPage === 'dashboard') renderDashboard();
+      } catch (e) {
+        showToast('Error al guardar: ' + e.message, 'warn');
+        btn.innerHTML = '<i class="ti ti-check"></i> Guardar y Analizar';
+        btn.disabled = false;
+      }
+    }
+
+    function localNoTradeAI(reason) {
+      if (reason === 'No dio entrada') return { score: 'Excelente', feedback: 'Esperar confirmación total antes de entrar es lo que separa a un trader consistente. Tu disciplina hoy vale más que cualquier trade.' };
+      if (reason === 'Checklist incompleta') return { score: 'Excelente', feedback: 'Rechazar una entrada por checklist incompleta es una victoria. Cada vez que respetas el proceso estás construyendo tu edge.' };
+      if (reason === 'Condiciones de mercado malas') return { score: 'Buena', feedback: 'Reconocer que el entorno no es propicio y quedarse fuera protege tu capital y tu mente. Bien hecho.' };
+      if (reason === 'Límite diario alcanzado') return { score: 'Excelente', feedback: 'Parar cuando el plan lo dicta, ya sea en ganancias o pérdidas, demuestra control absoluto. Es la clave de la supervivencia.' };
+      if (reason === 'Evento macro') return { score: 'Buena', feedback: 'Evitar la alta volatilidad de las noticias es una excelente gestión de riesgo.' };
+      return { score: 'Neutral', feedback: 'Conocer tus límites y no operar cuando no estás al 100% es gestión de riesgo avanzada. Recarga energías para la próxima sesión.' };
+    }
+
+    function showNoTradeResult(data) {
+      const m = document.createElement('div'); m.className = 'modal-overlay'; m.id = 'notrade-result-modal';
+      const color = data.ai_score === 'Excelente' ? 'var(--green)' : data.ai_score === 'Buena' ? 'var(--lila)' : 'var(--amber)';
+      m.innerHTML = `<div class="modal" style="text-align:center;max-width:400px">
+        <div style="width:80px;height:80px;border-radius:50%;background:${color};box-shadow:0 0 30px ${color}40;margin:0 auto 20px auto;border:4px solid var(--bg3);display:flex;align-items:center;justify-content:center">
+          <i class="ti ti-shield" style="font-size:40px;color:#fff"></i>
+        </div>
+        <h2 style="color:${color};margin-bottom:10px;font-size:24px">${data.ai_score}</h2>
+        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:20px;font-style:italic">"${data.ai_feedback}"</p>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:24px;text-transform:uppercase;letter-spacing:0.08em;font-weight:600">Registrado. Sigue así.</div>
+        <button class="btn btn-primary" style="width:100%" onclick="closeModal('notrade-result-modal')">Entendido</button>
+      </div>`;
+      document.body.appendChild(m);
+    }
+
+    function showNoTradeDetail(date) {
+      const data = S.noTradeDays.find(nt => nt.trade_date === date);
+      if (!data) return;
+      showNoTradeResult(data);
+    }
+
     document.getElementById('auth-password').addEventListener('keydown', e => { if (e.key === 'Enter') handleAuth(); });
   </script>
 </body>
